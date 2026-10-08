@@ -1,0 +1,29 @@
+name: ERP — publicar (manual)
+# Só roda quando você clica em "Run workflow" na aba Actions. Antes, siga erp/docs/DEPLOY.md (segredos e variáveis).
+on: { workflow_dispatch: {} }
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, id-token: write }
+    env:
+      PROJECT: ${{ vars.GCP_PROJECT_ID }}
+      REGION: southamerica-east1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with: { credentials_json: '${{ secrets.GCP_SA_KEY }}' }
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: API — publicar no Cloud Run
+        run: |
+          gcloud run deploy gtx-erp-api --source erp/api --project "$PROJECT" --region "$REGION" --allow-unauthenticated \
+            --set-secrets "DATABASE_URL=gtx-erp-database-url:latest" \
+            --set-env-vars "PUBLIC_URL=${{ vars.PUBLIC_URL }},CORS_ORIGIN=${{ vars.PUBLIC_URL }}" \
+            --min-instances 0 --max-instances 3 --memory 512Mi
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Web — compilar
+        working-directory: erp/web
+        run: npm ci && npm run build
+      - name: Web — publicar no Firebase Hosting
+        working-directory: erp
+        run: npx --yes firebase-tools@latest deploy --only hosting --project "$PROJECT" --non-interactive

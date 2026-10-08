@@ -1,0 +1,35 @@
+name: ERP — testes
+on:
+  push:
+    paths: ['erp/**', '.github/workflows/erp-ci.yml']
+  pull_request:
+    paths: ['erp/**']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: erp, POSTGRES_PASSWORD: erp, POSTGRES_DB: wmg_erp }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U erp" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://erp:erp@localhost:5432/wmg_erp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: API — instalar, tipos, migrar, demo e testes
+        working-directory: erp/api
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run migrate
+          npm run seed:demo
+          npm test
+      - name: Web — instalar e compilar
+        working-directory: erp/web
+        run: |
+          npm ci
+          npm run build

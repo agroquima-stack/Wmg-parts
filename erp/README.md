@@ -1,4 +1,4 @@
-# WMG ERP
+# GTX MOTO PARTS — ERP
 
 ERP para distribuidora de motopeças. Arquitetura completa em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md). O `index.html` na raiz do repositório é o sistema anterior e não é alterado.
 

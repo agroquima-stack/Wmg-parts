@@ -1,4 +1,4 @@
-# WMG ERP — Arquitetura (primeira entrega)
+# GTX MOTO PARTS ERP — Arquitetura (primeira entrega)
 
 > Escopo: ERP + gestão + BI + pricing + IA para distribuidora de motopeças, multiempresa/multifilial.
 > Estado: **Fases 1 a 7 implementadas (Core, Estoque, Comercial, Compras, Financeiro, Fiscal e Controladoria)**. As demais fases estão especificadas aqui e entram em migrações incrementais.

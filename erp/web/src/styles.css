@@ -1,24 +1,30 @@
-:root{--blue:#1d4ed8;--blue-600:#2563eb;--blue-50:#eff6ff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;--bg:#f6f8fb;--card:#fff;
+:root{/* Identidade GTX MOTO PARTS — paleta provisória (sem vermelho na marca); trocar aqui quando houver a paleta oficial */
+  --blue:#1e40af;--blue-600:#2563eb;--blue-50:#eaf1ff;--ink:#0f172a;--mute:#64748b;--line:#e3e8ef;--bg:#f3f5f9;--card:#fff;
+  --side:#0b1324;--side-ink:#cbd5e1;--side-mute:#64748b;--side-hover:#16213a;--accent:#38bdf8;--shadow:0 1px 2px #0f172a0d,0 4px 14px #0f172a0a;
+
   --green:#15803d;--green-bg:#dcfce7;--red:#b91c1c;--red-bg:#fee2e2;--yellow:#a16207;--yellow-bg:#fef9c3}
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 Inter,system-ui,Segoe UI,Roboto,sans-serif;color:var(--ink);background:var(--bg)}
 a{color:var(--blue-600);text-decoration:none}
 .layout{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
-.side{background:#fff;border-right:1px solid var(--line);padding:16px 10px;position:sticky;top:0;height:100vh;overflow:auto}
-.brand{font-weight:800;color:var(--blue);font-size:18px;padding:4px 10px 14px}
-.side h4{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:14px 10px 4px}
-.side a{display:block;padding:7px 10px;border-radius:8px;color:var(--ink)}
-.side a.active{background:var(--blue-50);color:var(--blue);font-weight:600}
-.side a:hover{background:#f1f5f9}
+.side{background:var(--side);padding:16px 10px 24px;position:sticky;top:0;height:100vh;overflow:auto;scrollbar-width:thin;scrollbar-color:#223052 transparent}
+.brand{display:flex;flex-direction:column;line-height:1;padding:6px 10px 16px;margin-bottom:4px;border-bottom:1px solid #1a2744}
+.brand .gtx{font-weight:900;font-size:26px;letter-spacing:.04em;color:#fff;font-style:italic}.brand .gtx i{color:var(--accent);font-style:italic}
+.brand .sub{font-weight:700;font-size:10.5px;letter-spacing:.42em;color:var(--side-mute);margin-top:5px;padding-left:2px}
+.login .brand{border-bottom:0;padding:0 0 18px}.login .brand .gtx{color:var(--ink)}.login .brand .gtx i{color:var(--blue-600)}.login .brand .sub{color:var(--mute)}
+.side h4{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--side-mute);margin:18px 10px 5px;font-weight:700}
+.side a{display:block;padding:7px 10px;border-radius:8px;color:var(--side-ink);border-left:3px solid transparent}
+.side a.active{background:var(--side-hover);color:#fff;font-weight:600;border-left-color:var(--accent)}
+.side a:hover{background:var(--side-hover);color:#fff}
 .main{min-width:0}
-.top{display:flex;gap:12px;align-items:center;padding:10px 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.top{display:flex;gap:12px;align-items:center;padding:10px 24px;background:#fffffff2;backdrop-filter:blur(6px);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
 .top .search{flex:1;max-width:560px;position:relative}
 .results{position:absolute;top:38px;left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px #0f172a22;max-height:420px;overflow:auto}
 .results a{display:block;padding:8px 12px;border-bottom:1px solid var(--line);color:var(--ink)}
 .results small{color:var(--mute);display:block}
 .content{padding:24px}
-h1{font-size:22px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 18px}
+h1{font-size:23px;margin:0 0 4px;letter-spacing:-.01em;font-weight:800}.sub{color:var(--mute);margin:0 0 18px}
 .banner{background:var(--yellow-bg);color:var(--yellow);padding:6px 24px;font-weight:600;font-size:13px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
 .grid{display:grid;gap:14px}.kpis{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
 .kpi .v{font-size:26px;font-weight:700}.kpi .l{color:var(--mute);font-size:12px}
 .alert{padding:10px 12px;border-radius:8px;margin-bottom:8px;font-weight:500}
@@ -28,10 +34,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:v
 label{display:block;font-size:12px;color:var(--mute);margin-bottom:3px}
 label.chk{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:14px}label.chk input{width:auto}
 button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:#fff;padding:7px 12px}
-button.primary{background:var(--blue-600);border-color:var(--blue-600);color:#fff;font-weight:600}
+button.primary{background:linear-gradient(180deg,#2f6bff,#1f55e0);border-color:#1f55e0;color:#fff;font-weight:600;box-shadow:0 1px 2px #1e40af55}
+button.primary:hover:not(:disabled){filter:brightness(1.07)}
 button.danger{color:var(--red);border-color:#fecaca}
 button:disabled{opacity:.5;cursor:not-allowed}
-table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
 th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-size:12px;color:var(--mute);background:#f8fafc;font-weight:600}
 tr.click:hover{background:var(--blue-50);cursor:pointer}
@@ -42,7 +49,9 @@ tr.click:hover{background:var(--blue-50);cursor:pointer}
 .modal{background:#fff;border-radius:14px;width:min(860px,100%);padding:20px}
 .form{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}.form .full{grid-column:1/-1}
 .err{color:var(--red);margin:8px 0}.right{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
-.login{max-width:380px;margin:12vh auto;padding:0 16px}
+.login{max-width:400px;margin:12vh auto;padding:28px 26px;border-top:4px solid var(--blue-600)}
+.login-bg{min-height:100vh;background:radial-gradient(900px 500px at 15% 0,#dbe7ff 0,transparent 60%),radial-gradient(700px 420px at 100% 100%,#d8f1fb 0,transparent 55%),var(--bg);padding:1px 16px}
+.login .tag{color:var(--mute);margin:-8px 0 16px;font-size:13px}
 .muted{color:var(--mute)}.num{text-align:right}
 .pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:10px;color:var(--mute)}
 .perm-grid{display:grid;grid-template-columns:160px repeat(5,1fr);gap:4px 8px;align-items:center}

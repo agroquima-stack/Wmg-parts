@@ -14,16 +14,19 @@ import { Approvals, B2B, PDV, Pricing, PriceTables, PublicQuote, Quotes, Sales }
 import { Inventories, Movements, StockAnalysis, StockPage, Transfers } from './stock';
 import { ApplicationSearch, Audit, Branches, Brands, Categories, Customers, Dashboard, Products, Roles, Suppliers, Users, Vehicles } from './pages';
 
+/** Marca em texto (o logotipo oficial entra aqui quando houver o arquivo). */
+function Brand() { return <div className="brand"><span className="gtx">GT<i>X</i></span><span className="sub">MOTO PARTS</span></div>; }
+
 function Login() {
   const { login } = useAuth(); const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [err, setErr] = useState('');
   const submit = async (e: FormEvent) => { e.preventDefault(); setErr(''); try { await login(email, password); } catch (x) { setErr((x as Error).message); } };
-  return <form className="login card" onSubmit={submit}>
-    <div className="brand" style={{ padding: 0, marginBottom: 12 }}>WMG ERP</div>
+  return <div className="login-bg"><form className="login card" onSubmit={submit}>
+    <Brand /><div className="tag">Gestão de distribuição de motopeças</div>
     <label>E-mail</label><input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)} required />
     <label style={{ marginTop: 10 }}>Senha</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
     {err && <div className="err">{err}</div>}
     <div className="right"><button className="primary" style={{ width: '100%' }}>Entrar</button></div>
-  </form>;
+  </form></div>;
 }
 
 function ChangePassword({ forced }: { forced?: boolean }) {
@@ -73,7 +76,7 @@ function Shell() {
   if (!me) return <Login />;
   const switchBranch = async (id: string) => { await api('POST', '/auth/branch', { branchId: id }); location.reload(); };
   return <div className="layout">
-    <aside className="side"><div className="brand">WMG ERP</div>
+    <aside className="side"><Brand />
       {NAV.map((g) => { const items = g.items.filter(([, , p]) => !p || can(p)); return items.length ? <div key={g.group}><h4>{g.group}</h4>
         {items.map(([to, l]) => <NavLink key={to} to={to} end={to === '/' || to === '/estoque' || to === '/bi' || to === '/ai' || to === '/marketplace'} className={({ isActive }) => (isActive ? 'active' : '')}>{l}</NavLink>)}</div> : null; })}
       <h4>Conta</h4><NavLink to="/senha">Alterar senha</NavLink><a href="#" onClick={(e) => { e.preventDefault(); logout(); }}>Sair</a></aside>

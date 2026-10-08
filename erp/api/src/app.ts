@@ -27,7 +27,8 @@ import { returnsRoutes } from './routes/returns.js';
 import { closingRoutes } from './routes/closing.js';
 
 export async function buildApp() {
-  const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000 });
+  const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000,
+    rewriteUrl: (req) => (req.url ?? '/').replace(/^\/api(?=\/|\?|$)/, '') || '/' });   // Firebase Hosting encaminha /api/** sem remover o prefixo
   await app.register(helmet);
   await app.register(cors, { origin: config.corsOrigin, methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
