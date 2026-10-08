@@ -16,5 +16,7 @@ Produção: `ADMIN_EMAIL=… ADMIN_PASSWORD=… COMPANY_NAME=… npm run bootstr
 Testes: `cd api && npm test` (integração, exige Postgres com a demo).
 
 ## Estado
+Fase 2 (Estoque) pronta: saldos por filial/status, entradas/saídas/ajustes, reserva, bloqueio, avaria, transferências, inventário geral/rotativo, histórico imutável, custo médio global, produtos parados e curva ABC.
+
 Fase 1 (Core) pronta: login/sessões, multiempresa/multifilial, RBAC, auditoria, produtos (múltiplos EAN), aplicações em moto + busca "Pastilha CG 160 2020", equivalências, clientes (CPF/CNPJ validados), fornecedores, marcas/categorias, busca global.
 Nada é simulado: todas as telas leem/escrevem no banco e respeitam permissões.

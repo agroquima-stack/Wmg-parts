@@ -10,6 +10,7 @@ import { catalogRoutes } from './routes/catalog.js';
 import { productRoutes } from './routes/products.js';
 import { adminRoutes } from './routes/admin.js';
 import { searchRoutes } from './routes/search.js';
+import { stockRoutes } from './routes/stock.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000 });
@@ -47,5 +48,6 @@ export async function buildApp() {
   await app.register(productRoutes);
   await app.register(adminRoutes);
   await app.register(searchRoutes);
+  await app.register(stockRoutes);
   return app;
 }

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { api, get } from './api';
 import { AuthProvider, useAuth } from './auth';
+import { Inventories, Movements, StockAnalysis, StockPage, Transfers } from './stock';
 import { ApplicationSearch, Audit, Brands, Categories, Customers, Dashboard, Products, Roles, Suppliers, Users, Vehicles } from './pages';
 
 function Login() {
@@ -41,6 +42,8 @@ const NAV: { group: string; items: [string, string, string][] }[] = [
   { group: 'Geral', items: [['/', 'Visão geral', ''], ['/busca', 'Busca por aplicação', 'products:view']] },
   { group: 'Cadastros', items: [['/produtos', 'Produtos', 'products:view'], ['/marcas', 'Marcas', 'brands:view'], ['/categorias', 'Categorias', 'categories:view'],
     ['/motos', 'Motos', 'vehicles:view'], ['/clientes', 'Clientes', 'customers:view'], ['/fornecedores', 'Fornecedores', 'suppliers:view']] },
+  { group: 'Estoque', items: [['/estoque', 'Saldos', 'stock:view'], ['/estoque/movimentos', 'Movimentações', 'stock:view'], ['/estoque/transferencias', 'Transferências', 'stock:view'],
+    ['/estoque/inventario', 'Inventário', 'stock:view'], ['/estoque/analises', 'Parados e curva ABC', 'stock:view']] },
   { group: 'Administração', items: [['/usuarios', 'Usuários', 'users:view'], ['/perfis', 'Perfis e permissões', 'roles:view'], ['/auditoria', 'Auditoria', 'audit:view']] },
 ];
 
@@ -51,7 +54,7 @@ function Shell() {
   return <div className="layout">
     <aside className="side"><div className="brand">WMG ERP</div>
       {NAV.map((g) => { const items = g.items.filter(([, , p]) => !p || can(p)); return items.length ? <div key={g.group}><h4>{g.group}</h4>
-        {items.map(([to, l]) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => (isActive ? 'active' : '')}>{l}</NavLink>)}</div> : null; })}
+        {items.map(([to, l]) => <NavLink key={to} to={to} end={to === '/' || to === '/estoque'} className={({ isActive }) => (isActive ? 'active' : '')}>{l}</NavLink>)}</div> : null; })}
       <h4>Conta</h4><NavLink to="/senha">Alterar senha</NavLink><a href="#" onClick={(e) => { e.preventDefault(); logout(); }}>Sair</a></aside>
     <div className="main">
       {me.company.is_demo && <div className="banner">AMBIENTE DE DEMONSTRAÇÃO — todos os dados são fictícios.</div>}
@@ -62,6 +65,8 @@ function Shell() {
         <Route path="/" element={<Dashboard />} /><Route path="/busca" element={<ApplicationSearch />} />
         <Route path="/produtos" element={<Products />} /><Route path="/marcas" element={<Brands />} /><Route path="/categorias" element={<Categories />} />
         <Route path="/motos" element={<Vehicles />} /><Route path="/clientes" element={<Customers />} /><Route path="/fornecedores" element={<Suppliers />} />
+        <Route path="/estoque" element={<StockPage />} /><Route path="/estoque/movimentos" element={<Movements />} /><Route path="/estoque/transferencias" element={<Transfers />} />
+        <Route path="/estoque/inventario" element={<Inventories />} /><Route path="/estoque/analises" element={<StockAnalysis />} />
         <Route path="/usuarios" element={<Users />} /><Route path="/perfis" element={<Roles />} /><Route path="/auditoria" element={<Audit />} />
         <Route path="/senha" element={<ChangePassword />} /><Route path="*" element={<Navigate to="/" />} />
       </Routes></div></div></div>;

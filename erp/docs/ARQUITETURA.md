@@ -1,7 +1,7 @@
 # WMG ERP — Arquitetura (primeira entrega)
 
 > Escopo: ERP + gestão + BI + pricing + IA para distribuidora de motopeças, multiempresa/multifilial.
-> Estado: **Fase 1 (Core) implementada**. As demais fases estão especificadas aqui e entram em migrações incrementais.
+> Estado: **Fases 1 (Core) e 2 (Estoque) implementadas**. As demais fases estão especificadas aqui e entram em migrações incrementais.
 
 ## 1. Arquitetura geral
 
@@ -87,7 +87,7 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 | Fase | Entrega | Status |
 |---|---|---|
 | 1 Core | auth, empresas, filiais, usuários/RBAC, auditoria, produtos, marcas, categorias, motos/aplicações, equivalências, clientes, fornecedores, busca global, demo | **feito** |
-| 2 Estoque | saldos por filial/status, movimentações, transferência, inventário, mínimo/máx, curva ABC, parados | próxima |
+| 2 Estoque | saldos por filial/status, movimentações imutáveis, transferência, inventário, mínimo/máx, curva ABC, parados, custo médio global | **feito** |
 | 3 Comercial | tabelas de preço, motor de pricing, descontos/alçadas, orçamento→pedido, venda, PDV, B2B | |
 | 4 Compras | sugestão de compra, cotação, pedido, recebimento, XML, custo médio | |
 | 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | |
@@ -120,7 +120,18 @@ A fazer: RLS do Postgres como segunda barreira, 2FA, criptografia de campos sens
 
 Stateless API (escala horizontal atrás de balanceador); sessão no banco (migrável p/ Redis); paginação obrigatória (máx. 200); índices por `company_id` + chaves de busca; `stock_movements`/`audit_log` append-only e particionáveis por mês; saldos materializados em `stock_balances` (leitura O(1)); BI/relatórios pesados em réplica de leitura/visões materializadas; workers separados via outbox para integrações; multiempresa por coluna hoje, com caminho para schema/banco dedicado por cliente grande.
 
-## Perguntas em aberto (precisam de decisão do negócio)
-- Regime tributário da empresa (Simples/Presumido/Real) e provedor fiscal (ex.: Focus NFe, eNotas) — definem a Fase 6.
-- Custo médio ponderado por filial ou global? (assumido: por filial, na Fase 4)
-- Regras de alçada de desconto (percentuais por perfil) — hoje há `max_discount_pct` por usuário.
+## Decisões do negócio (confirmadas)
+- **Regime tributário: Simples Nacional.** A Fase 6 usa CSOSN (não CST de ICMS), sem destaque de crédito de ICMS na saída, apuração via DAS; ICMS-ST/DIFAL tratados por regra de produto/UF. Parametrização a validar com o contador.
+- **Custo médio: global** (um custo médio por produto, somando todas as filiais). Implementado: toda entrada com custo recalcula `cost_avg` ponderado pelo saldo próprio total (disponível+reservado+avariado+quarentena); transferência não altera custo.
+- **Alçada de desconto:** todo desconto acima do limite do usuário (`users.max_discount_pct`) exige aprovação do gestor (permissão `sales:approve`), registrada em `discount_approvals` com solicitante, aprovador, percentual, margem antes/depois e auditoria. Vendas abaixo da margem mínima seguem a mesma trava. Entra na Fase 3.
+
+## Fase 2 — Estoque (como funciona)
+- `stock_balances` por produto × filial × status (disponível, reservado, trânsito, avariado, quarentena, consignado); saldo nunca negativo (CHECK + validação sob `FOR UPDATE`, testado com saídas concorrentes).
+- `applyMovement` é a **única** porta de alteração de saldo: grava `stock_movements` (append-only, trigger bloqueia UPDATE/DELETE) com usuário, documento, origem/destino, quantidade anterior/movida/posterior e motivo.
+- Operações: entrada, entrada consignada, saída, ajuste ±, reserva/liberação, bloqueio/desbloqueio, avaria, transferência (saída → trânsito → recebimento, ou cancelamento) e inventário geral/rotativo (acerto exige `stock:approve`).
+- Análises: abaixo do mínimo / sem estoque / excesso, produtos parados por faixa (0–30 … +360) com capital, valor de venda, margem potencial e sugestão, e curva ABC configurável (corte A/B) por valor em estoque, quantidade ou saídas. **Faturamento e margem** como critério dependem das vendas (Fase 3) e hoje retornam erro explícito.
+- "Parado" usa a data da última saída (ou da entrada, se nunca saiu); quando a venda existir, ela gera a saída e a análise passa a refletir vendas reais.
+
+## Perguntas em aberto
+- Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.
+- Percentual de desconto inicial por usuário/perfil (hoje cada usuário tem `max_discount_pct`).

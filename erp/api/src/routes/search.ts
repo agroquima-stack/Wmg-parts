@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { pool } from '../db.js';
 import { can, requireAuth } from '../auth.js';
+import { idleAnalysis, stockSummary } from './stock.js';
 
 export async function searchRoutes(app: FastifyInstance) {
   /**
@@ -95,6 +96,19 @@ export async function searchRoutes(app: FastifyInstance) {
     if (alertsQ.without_ncm) alerts.push({ level: 'yellow', text: `${alertsQ.without_ncm} produtos ativos sem NCM (necessário para emissão fiscal).` });
     if (alertsQ.without_application) alerts.push({ level: 'yellow', text: `${alertsQ.without_application} produtos ativos sem aplicação em moto.` });
     if (alertsQ.customers_blocked) alerts.push({ level: 'red', text: `${alertsQ.customers_blocked} clientes bloqueados.` });
-    return { counts, alerts };
+    let stock = null;
+    if (a.permissions.has('stock:view')) {
+      stock = await stockSummary(c, null);
+      const idle = await idleAnalysis(c, null);
+      const old = idle.filter((b) => ['181-360', '+360'].includes(b.bucket));
+      const idleValue = old.reduce((s, b) => s + Number(b.cost_value), 0);
+      const idle180 = { value: idleValue, products: old.reduce((s, b) => s + b.products, 0) };
+      stock = { ...stock, idle180 };
+      if (stock.out_of_stock) alerts.unshift({ level: 'red', text: `${stock.out_of_stock} produtos sem estoque disponível.` });
+      if (stock.below_min) alerts.unshift({ level: 'red', text: `${stock.below_min} produtos estão abaixo do estoque mínimo.` });
+      if (idleValue > 0) alerts.push({ level: 'yellow', text: `R$ ${idleValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} parados em estoque há mais de 180 dias.` });
+      if (stock.excess) alerts.push({ level: 'yellow', text: `${stock.excess} produtos acima do estoque máximo.` });
+    }
+    return { counts, alerts, stock };
   });
 }

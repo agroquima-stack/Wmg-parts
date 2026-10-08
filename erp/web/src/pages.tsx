@@ -20,11 +20,15 @@ export function Dashboard() {
   if (!d) return <p className="muted">Carregando…</p>;
   const k = (l: string, v: ReactNode, to?: string) => <div className="card kpi">{to ? <Link to={to}><div className="v">{v}</div></Link> : <div className="v">{v}</div>}<div className="l">{l}</div></div>;
   return <>
-    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Vendas, estoque e financeiro entram nas próximas fases.</p>
+    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Vendas e financeiro entram nas próximas fases.</p>
     <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Produtos ativos', d.counts.products_active, '/produtos')}{k('Clientes ativos', d.counts.customers_active, '/clientes')}
       {k('Fornecedores', d.counts.suppliers_active, '/fornecedores')}{k('Marcas', d.counts.brands, '/marcas')}{k('Modelos de moto', d.counts.vehicle_models, '/motos')}
     </div>
+    {d.stock && <div className="grid kpis" style={{ marginBottom: 18 }}>
+      {k('Valor em estoque (custo médio)', brl(d.stock.total_value), '/estoque')}{k('Abaixo do mínimo', d.stock.below_min, '/estoque')}
+      {k('Sem estoque', d.stock.out_of_stock, '/estoque')}{k('Acima do máximo', d.stock.excess, '/estoque')}
+      {k('Parado > 180 dias', brl(d.stock.idle180.value), '/estoque/analises')}</div>}
     <div className="card"><h3 style={{ marginTop: 0 }}>Alertas</h3>
       {d.alerts.length ? d.alerts.map((a: any, i: number) => <div key={i} className={`alert ${a.level}`}>{a.text}</div>) : <div className="alert green">Nenhum alerta de cadastro.</div>}</div>
   </>;
