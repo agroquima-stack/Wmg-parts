@@ -1,7 +1,7 @@
 # WMG ERP — Arquitetura (primeira entrega)
 
 > Escopo: ERP + gestão + BI + pricing + IA para distribuidora de motopeças, multiempresa/multifilial.
-> Estado: **Fases 1 a 6 implementadas (Core, Estoque, Comercial, Compras, Financeiro e Fiscal)**. As demais fases estão especificadas aqui e entram em migrações incrementais.
+> Estado: **Fases 1 a 7 implementadas (Core, Estoque, Comercial, Compras, Financeiro, Fiscal e Controladoria)**. As demais fases estão especificadas aqui e entram em migrações incrementais.
 
 ## 1. Arquitetura geral
 
@@ -93,7 +93,7 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 | 4 Compras | sugestão de compra, cotação, pedido, recebimento, XML, custo médio | **feito** |
 | 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | **feito** |
 | 6 Fiscal | NF-e/NFC-e via provedor, parametrização tributária (validada por contador), guias | |
-| 7 Controladoria | plano de contas, centros de custo, DRE, balanço | |
+| 7 Controladoria | plano de contas, centros de custo, DRE, balanço | **feito** |
 | 8 BI · 9 IA · 10 Ecossistema | dashboards, alertas, "Pergunte à Empresa", previsão, WhatsApp, marketplaces | |
 
 ## 8. Wireframes (desktop)
@@ -122,6 +122,7 @@ A fazer: RLS do Postgres como segunda barreira, 2FA, criptografia de campos sens
 Stateless API (escala horizontal atrás de balanceador); sessão no banco (migrável p/ Redis); paginação obrigatória (máx. 200); índices por `company_id` + chaves de busca; `stock_movements`/`audit_log` append-only e particionáveis por mês; saldos materializados em `stock_balances` (leitura O(1)); BI/relatórios pesados em réplica de leitura/visões materializadas; workers separados via outbox para integrações; multiempresa por coluna hoje, com caminho para schema/banco dedicado por cliente grande.
 
 ## Decisões do negócio (confirmadas)
+- **Controladoria (confirmado):** DRE por **competência**; **saldo inicial de R$ 22.600,07** — interpretado como saldo inicial de caixa/bancos, com **Capital social** como contrapartida (se o valor tiver outro significado, o contador reclassifica por lançamento de abertura).
 - **Fiscal (confirmado):** provedor de emissão **ainda não escolhido**; vendas para **CPF e CNPJ** (atacado e varejo), com regras próprias para CNPJ; **DAS apenas como estimativa** por enquanto.
 - **Financeiro (confirmado):** banco único hoje = **BTG Pactual**, extrato em **CSV**; juros/multa pelo **padrão de mercado** (multa 2% única + juros 1% a.m. pro rata dia, configurável); **sem balcão** — vendas por representante externo e online, caixa físico opcional.
 - **Compras (confirmado):** sem aprovação de compra por padrão — `emitir` já aprova; há um limite de aprovação configurável (`purchasing.approval_threshold`) para quando o negócio quiser. Fornecedores emitem **nota normal do Simples, sem ST**.
@@ -180,6 +181,16 @@ Stateless API (escala horizontal atrás de balanceador); sessão no banco (migr�
 - **Impostos (DAS)**: painel mensal com faturamento por competência, estimativa e obrigação (valor oficial da guia, vencimento no dia 20 ajustado para dia útil sem feriados, comprovante). A estimativa usa **alíquota efetiva informada** (padrão) ou a **tabela do Anexo I (comércio)** pelo RBT12 (calculado, proporcionalizado no 1º ano, ou informado pelo contador). Gerar o título cria a conta a pagar (categoria "Simples Nacional (DAS)") e o status acompanha o pagamento. **Sempre estimativa** até o contador informar a guia do PGDAS-D.
 - **Reforma tributária (IBS/CBS)**: campos previstos no documento (opcionais, zerados) — sem cálculo até a regra e o layout do provedor serem confirmados.
 - Limitações: nenhuma emissão com valor fiscal enquanto não houver provedor (nem certificado A1/CSC configurados); sem inutilização de numeração, contingência, manifestação do destinatário, MDF-e/CT-e nem DANFE próprio (o provedor fornece); a devolução gera só a nota — estoque/financeiro da devolução serão tratados no módulo de devoluções e garantias; código IBGE do município deve ser informado (alerta, não bloqueio); não há "ZIP" de XMLs para o contador (download individual).
+
+## Fase 7 — Controladoria (como funciona)
+- **Razão de partidas dobradas** (`journal_entries`/`journal_lines`), **imutável** (gatilho bloqueia UPDATE/DELETE; correção só por estorno) e **balanceado pelo banco** (gatilho de restrição recusa, ao fim da transação, qualquer lançamento com débitos ≠ créditos). Cada linha carrega dimensões (filial, canal, cliente, produto, marca, categoria, vendedor, centro de custo, fornecedor, conta bancária) e cada lançamento tem **data** e **competência**.
+- **Lançamentos automáticos** (um por origem, idempotentes): venda concluída (receita, contas a receber, CMV/estoque, provisão do DAS e comissão — por item); cancelamento (devolução como dedução da receita, estoque de volta, valor já recebido vira "clientes a restituir" e gera conta a pagar de restituição); baixas de recebíveis (juros/multa = receita financeira, desconto concedido, taxa de cartão) e de pagáveis (juros pagos, descontos obtidos) e seus estornos; entrada de NF (estoque × fornecedores, diferença de conferência em "créditos com fornecedores"); devolução ao fornecedor; despesas por **competência** (despesa × outras contas a pagar) ou imobilizado; tarifas, juros, rendimentos, ajustes, transferências e aplicações (conta de compensação que fecha em zero), quebra de caixa; perdas/sobras de estoque (CMV – perdas) e entradas manuais (saldo de abertura a classificar); ajuste da provisão do DAS ao valor da guia; saldo inicial das contas bancárias (**contrapartida: Capital social**).
+- **Plano de contas configurável** (padrão para comércio com ~45 contas): renomear/renumerar/criar contas e **mapear cada categoria financeira para a conta contábil**; contas "sistema" (usadas pelos lançamentos automáticos por chave interna) não são inativadas. **Lançamentos manuais e de abertura** (imobilizado, empréstimos, lucros acumulados…) exigem `accounting:approve`, devem balancear e são estornáveis.
+- **DRE gerencial por competência** — receita bruta, (−) devoluções/cancelamentos/descontos, (−) impostos (DAS), = receita líquida, (−) CMV (inclui perdas de estoque), = lucro bruto, (−) despesas comerciais/administrativas/financeiras, (+) receitas financeiras, = resultado operacional, (+/−) outros, = **lucro líquido**; por período e **por mês, filial, canal, categoria, marca ou cliente**, com análise vertical e exportação CSV. Despesas sem dimensão aparecem em "Não alocado". Valores com sinal (deduções/custos/despesas negativos).
+- **Balanço patrimonial** em qualquer data (circulante/não circulante, passivo, patrimônio líquido com resultado apurado), **balancete**, **razão por conta**, **despesas por centro de custo**.
+- **Verificações de consistência**: razão × saldo de cada conta bancária, × contas a receber, × fornecedores (NF e créditos), × estoque físico valorizado (tolerância: razão usa custo de cada movimento; físico usa custo médio atual), débitos = créditos, **Ativo = Passivo + PL**, vendas sem lançamento. **Sincronizar razão** lança o que ainda não tem lançamento (útil sobre dados anteriores à Fase 7).
+- **Registrar o saldo inicial de R$ 22.600,07 em produção**: `ADMIN_EMAIL=… ADMIN_PASSWORD=… COMPANY_NAME=… OPENING_BALANCE=22600.07 npm run bootstrap` cria a conta BTG Pactual com esse saldo (ou cadastre a conta em Financeiro → Bancos e caixa). Outros saldos de abertura: Controladoria → Lançamentos → Abertura do balanço.
+- Limitações: sem fechamento/bloqueio de períodos nem encerramento do exercício (o resultado do período aparece como "resultado apurado" no PL; a transferência para lucros acumulados é manual do contador); provisão do DAS usa a alíquota efetiva dos parâmetros (true-up só ao gerar o título do DAS); comissão e imposto de venda cancelada após fechamento de comissão/DAS dependem de ajuste manual; rateio de imposto/comissão por item é proporcional; estoque no razão pode divergir do físico pelo custo médio; sem depreciação, provisões, IRPJ/CSLL (Simples), conciliação de cartão por operadora, nem SPED/ECD/ECF.
 
 ## Perguntas em aberto
 - Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.

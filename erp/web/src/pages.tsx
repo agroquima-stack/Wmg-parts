@@ -22,7 +22,7 @@ export function Dashboard() {
   if (!d) return <p className="muted">Carregando…</p>;
   const k = (l: string, v: ReactNode, to?: string) => <div className="card kpi">{to ? <Link to={to}><div className="v">{v}</div></Link> : <div className="v">{v}</div>}<div className="l">{l}</div></div>;
   return <>
-    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Contabilidade (DRE e balanço) entra nas próximas fases.</p>
+    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. BI, alertas inteligentes e IA entram nas próximas fases.</p>
     <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Produtos ativos', d.counts.products_active, '/produtos')}{k('Clientes ativos', d.counts.customers_active, '/clientes')}
       {k('Fornecedores', d.counts.suppliers_active, '/fornecedores')}{k('Marcas', d.counts.brands, '/marcas')}{k('Modelos de moto', d.counts.vehicle_models, '/motos')}
@@ -37,6 +37,9 @@ export function Dashboard() {
     {d.finance && <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Saldo em caixa', brl(d.finance.cash_balance), '/financeiro/bancos')}{k('Saldo bancário', brl(d.finance.bank_balance), '/financeiro/bancos')}{k('A receber', brl(d.finance.receivable_open), '/financeiro/receber')}
       {k('A receber vencido', brl(d.finance.receivable_overdue), '/financeiro/receber')}{k('Menor saldo projetado (90 d)', brl(d.finance.projected_min.value), '/financeiro/fluxo')}</div>}
+    {d.accounting && <div className="grid kpis" style={{ marginBottom: 18 }}>
+      {k('Receita líquida do mês', brl(d.accounting.receita_liquida), '/contabil/dre')}{k('Lucro bruto', `${brl(d.accounting.lucro_bruto)}${d.accounting.margem_bruta_pct != null ? ' · ' + d.accounting.margem_bruta_pct + '%' : ''}`, '/contabil/dre')}
+      {k('Lucro líquido do mês', brl(d.accounting.lucro_liquido), '/contabil/dre')}{k('Margem líquida', d.accounting.margem_liquida_pct != null ? d.accounting.margem_liquida_pct + '%' : '—', '/contabil/dre')}</div>}
     {d.fiscal && <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Vendas sem nota fiscal', d.fiscal.sales_without_invoice, '/fiscal/pendentes')}{k('Rascunhos com pendências', d.fiscal.drafts_with_errors, '/fiscal/notas')}{k('Notas rejeitadas', d.fiscal.rejected, '/fiscal/notas')}
       {k('Próximo DAS', d.fiscal.next_das ? `${brl(d.fiscal.next_das.value)} · ${String(d.fiscal.next_das.due_date).split('-').reverse().join('/')}` : '—', '/fiscal/impostos')}</div>}

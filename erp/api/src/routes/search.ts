@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { can, requireAuth } from '../auth.js';
 import { idleAnalysis, stockSummary } from './stock.js';
 import { cashflow } from '../finance.js';
+import { dre } from '../accounting.js';
 
 export async function searchApplications(companyId: string, raw: string) {
   const tokens = raw.split(/\s+/).filter(Boolean).slice(0, 8);
@@ -182,6 +183,13 @@ export async function searchRoutes(app: FastifyInstance) {
       if (k.rejected) alerts.unshift({ level: 'red', text: `${k.rejected} nota(s) fiscal(is) rejeitada(s) aguardando correção.` });
       if (das) { const days = Math.ceil((Date.parse(das.due_date) - Date.now()) / 86400000); if (days <= 7) alerts.push({ level: days < 0 ? 'red' : 'yellow', text: `DAS ${days < 0 ? 'vencido há ' + -days : 'vence em ' + days} dia(s): R$ ${Number(das.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` }); }
     }
-    return { counts, alerts, stock, commercial, purchasing, finance, fiscal };
+    let accounting = null;
+    if (a.permissions.has('accounting:view')) {
+      const m = await dre(pool, c, { from: new Date().toISOString().slice(0, 7) + '-01', to: new Date().toISOString().slice(0, 10) });
+      const s = m.summary as Record<string, Record<string, number>>; const v = (k: string) => s[k]?.total ?? Object.values(s[k] ?? {})[0] ?? 0;
+      const rl = v('receita_liquida');
+      accounting = { receita_bruta: v('receita_bruta'), receita_liquida: rl, lucro_bruto: v('lucro_bruto'), lucro_liquido: v('lucro_liquido'), margem_bruta_pct: rl ? Math.round(v('lucro_bruto') / rl * 1000) / 10 : null, margem_liquida_pct: rl ? Math.round(v('lucro_liquido') / rl * 1000) / 10 : null };
+    }
+    return { counts, alerts, stock, commercial, purchasing, finance, fiscal, accounting };
   });
 }

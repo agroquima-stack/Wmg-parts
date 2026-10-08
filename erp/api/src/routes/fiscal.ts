@@ -12,6 +12,7 @@ import { buildFiscalPayload, getFiscalSettings, type Validation } from '../fisca
 import { providers } from '../fiscal/providers.js';
 import { effectiveRateAnexoI, parseAccessKey } from '../fiscal/rules.js';
 import { text } from '../schemas.js';
+import { postTaxTrueUp } from '../accounting.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -281,6 +282,7 @@ export async function fiscalRoutes(app: FastifyInstance) {
       const p = (await db.query(`insert into payables (company_id, due_date, amount, description, category_id, cost_center_id, competence, doc_number) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
         [a.companyId, o.due_date, amount, `DAS ${String(o.competence).slice(0, 7)}${o.amount == null ? ' (estimativa)' : ''}`, await categoryId(db, a.companyId, 'Simples Nacional (DAS)'), cc?.id ?? null, o.competence, o.guide_ref])).rows[0];
       await db.query(`update tax_obligations set payable_id = $2, status = 'a_pagar' where id = $1`, [id, p.id]);
+      await postTaxTrueUp(db, id);
       await audit(db, a, 'tax_obligation', id, 'payable_created', null, { payable_id: p.id, amount, estimate: o.amount == null }); return { payable_id: p.id, amount };
     });
   });

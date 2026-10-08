@@ -8,7 +8,7 @@ export const DEFAULT_CATEGORIES: [string, string, string][] = [
   ['Salários e encargos', 'despesa', 'desp_administrativa'], ['Energia, água e internet', 'despesa', 'desp_administrativa'], ['Contabilidade e serviços', 'despesa', 'desp_administrativa'],
   ['Outras despesas administrativas', 'despesa', 'desp_administrativa'], ['Simples Nacional (DAS)', 'imposto', 'impostos'], ['Tarifas bancárias', 'financeira', 'desp_financeira'],
   ['Juros e multas pagos', 'financeira', 'desp_financeira'], ['Taxas de cartão e gateway', 'financeira', 'desp_financeira'], ['Juros e multas recebidos', 'financeira', 'rec_financeira'],
-  ['Rendimentos de aplicação', 'financeira', 'rec_financeira'], ['Quebra de caixa', 'despesa', 'desp_administrativa']];
+  ['Rendimentos de aplicação', 'financeira', 'rec_financeira'], ['Quebra de caixa', 'despesa', 'desp_administrativa']];   // 'Restituições a clientes' e 'Aquisição de imobilizado' vêm de seed_chart()
 
 /** Cria empresa + matriz + perfis padrão + usuário administrador (tudo na mesma transação). */
 export async function createCompany(db: PoolClient, o: {
@@ -29,6 +29,7 @@ export async function createCompany(db: PoolClient, o: {
   for (const n of ['Administrativo', 'Comercial', 'Logística', 'Estoque', 'Financeiro', 'Marketing', 'Diretoria', 'Filiais'])
     await db.query('insert into cost_centers (company_id, name) values ($1,$2)', [c.id, n]);
   for (const [name, kind, grp] of DEFAULT_CATEGORIES) await db.query('insert into finance_categories (company_id, name, kind, dre_group) values ($1,$2,$3,$4)', [c.id, name, kind, grp]);
+  await db.query('select seed_chart($1)', [c.id]);
   const u = (await db.query(
     `insert into users (company_id, role_id, name, email, password_hash, must_change_password) values ($1,$2,$3,$4,$5,$6) returning id`,
     [c.id, roleIds.administrador, o.adminName, o.adminEmail, await hashPassword(o.adminPassword), o.mustChangePassword ?? true])).rows[0];

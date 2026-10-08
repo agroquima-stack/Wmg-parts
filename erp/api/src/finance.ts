@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import { pool, type Db } from './db.js';
 import { HttpError, type Auth } from './auth.js';
 import { audit } from './audit.js';
+import { postSettlement, postSettlementReversal } from './accounting.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 export interface FinanceSettings { fine_pct: number; interest_monthly_pct: number; grace_days: number; default_accounts: Record<string, string> }
@@ -105,6 +106,7 @@ export async function settle(db: PoolClient, a: Auth, i: SettleInput) {
   if (movementId) await db.query('update account_movements set ref_id = $2 where id = $1', [movementId, s.id]);
   const left = r2(doc.outstanding - principal); const table = i.kind === 'receivable' ? 'receivables' : 'payables';
   await db.query(`update ${table} set status = $2, paid_at = case when $2 = 'pago' then now() else paid_at end, paid_amount = coalesce(paid_amount, 0) + $3 where id = $1`, [i.docId, left <= 0.004 ? 'pago' : 'parcial', cash]);
+  await postSettlement(db, s.id);
   await audit(db, a, i.kind, i.docId, 'settle', { outstanding: doc.outstanding }, { principal, discount, interest, fine, fee, cash, account: i.accountId, left });
   return { settlement: s, outstanding_after: left, cash };
 }
@@ -125,6 +127,7 @@ export async function reverseSettlement(db: PoolClient, a: Auth, settlementId: s
   const doc = await loadTitle(db, kind, docId, a.companyId, true);
   const status = doc.outstanding >= Number(doc.amount) - 0.004 ? 'aberto' : 'parcial';
   await db.query(`update ${kind === 'receivable' ? 'receivables' : 'payables'} set status = $2, paid_at = null, paid_amount = greatest(0, coalesce(paid_amount,0) - $3) where id = $1`, [docId, status, Number(s.principal) - Number(s.discount) + Number(s.interest) + Number(s.fine) - Number(s.fee)]);
+  await postSettlementReversal(db, settlementId);
   await audit(db, a, kind, docId, 'settlement_reversed', s, null);
   return { status };
 }

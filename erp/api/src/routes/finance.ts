@@ -7,6 +7,7 @@ import { assertRefs, insertRow, pageParams } from '../crud.js';
 import { ymd, accountBalance, calcCharges, cashflow, categoryId, collectionProfile, getFinanceSettings, loadTitle, reverseSettlement, settle, today, type Horizon } from '../finance.js';
 import { extractLines, guessMapping, norm, parseCsv, type CsvMapping } from '../lib/csv.js';
 import { text } from '../schemas.js';
+import { KIND_FALLBACK, postBankOpening, postMovement, postPayableCreated, postReceivableCreated } from '../accounting.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const money = z.coerce.number().min(0).max(1e10);
@@ -32,7 +33,9 @@ export async function financeRoutes(app: FastifyInstance) {
   app.get('/finance/categories', async (req) => { const a = can(req, 'finance:view'); return { items: (await pool.query('select * from finance_categories where company_id = $1 and active order by kind, name', [a.companyId])).rows }; });
   app.post('/finance/categories', async (req, reply) => {
     const a = can(req, 'finance:create');
-    const b = z.object({ name: z.string().trim().min(2).max(80), kind: z.enum(['receita', 'despesa', 'imposto', 'financeira', 'investimento', 'estoque', 'outras']), dre_group: text(40) }).parse(req.body);
+    const b = z.object({ name: z.string().trim().min(2).max(80), kind: z.enum(['receita', 'despesa', 'imposto', 'financeira', 'investimento', 'estoque', 'outras']), dre_group: text(40), ledger_account_id: z.string().uuid().nullish().transform((v) => v ?? null) }).parse(req.body);
+    if (b.ledger_account_id) await assertRefs(pool, a.companyId, b, { ledger_account_id: 'ledger_accounts' });
+    else b.ledger_account_id = (await pool.query('select id from ledger_accounts where company_id = $1 and system_key = $2', [a.companyId, KIND_FALLBACK[b.kind]])).rows[0]?.id ?? null;
     const r = await insertRow(pool, 'finance_categories', a.companyId, b); await audit(pool, a, 'finance_category', String(r.id), 'create', null, r); return reply.code(201).send(r);
   });
   app.get('/finance/cost-centers', async (req) => { const a = can(req, 'finance:view'); return { items: (await pool.query('select * from cost_centers where company_id = $1 and active order by name', [a.companyId])).rows }; });
@@ -54,7 +57,7 @@ export async function financeRoutes(app: FastifyInstance) {
     opening_balance: z.coerce.number().min(-1e10).max(1e10).default(0), opening_date: date.optional(), active: z.boolean().optional() });
   app.post('/bank-accounts', async (req, reply) => {
     const a = can(req, 'finance:create'); const b = accountBody.parse(req.body);
-    const r = await insertRow(pool, 'bank_accounts', a.companyId, b); await audit(pool, a, 'bank_account', String(r.id), 'create', null, r); return reply.code(201).send(r);
+    const r = await tx(async (db) => { const x = await insertRow(db, 'bank_accounts', a.companyId, b); await postBankOpening(db, String(x.id)); await audit(db, a, 'bank_account', String(x.id), 'create', null, x); return x; }); return reply.code(201).send(r);
   });
   app.patch('/bank-accounts/:id', async (req) => {
     const a = can(req, 'finance:edit'); const id = (req.params as { id: string }).id; const b = accountBody.partial().omit({ opening_balance: true, opening_date: true }).parse(req.body);
@@ -80,8 +83,8 @@ export async function financeRoutes(app: FastifyInstance) {
     const out = await tx(async (db) => {
       await assertRefs(db, a.companyId, { f: b.from_account_id, t: b.to_account_id } as never, { f: 'bank_accounts', t: 'bank_accounts' });
       const d = b.date ?? today(); const ref = (await db.query('select gen_random_uuid() id')).rows[0].id as string; const desc = b.description ?? 'Transferência entre contas';
-      const o = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,$3,$4,$5,$6,'transfer',$7,$8) returning id`, [a.companyId, b.from_account_id, d, -b.amount, b.kind, desc, ref, a.userId])).rows[0];
-      const i = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,$3,$4,$5,$6,'transfer',$7,$8) returning id`, [a.companyId, b.to_account_id, d, b.amount, b.kind, desc, ref, a.userId])).rows[0];
+      const o = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,$3,$4,$5,$6,'transfer',$7,$8) returning id`, [a.companyId, b.from_account_id, d, -b.amount, b.kind, desc, ref, a.userId])).rows[0]; await postMovement(db, o.id);
+      const i = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,$3,$4,$5,$6,'transfer',$7,$8) returning id`, [a.companyId, b.to_account_id, d, b.amount, b.kind, desc, ref, a.userId])).rows[0]; await postMovement(db, i.id);
       await audit(db, a, 'transfer', ref, 'create', null, b); return { transfer_id: ref, out_movement: o.id, in_movement: i.id };
     });
     return reply.code(201).send(out);
@@ -96,7 +99,7 @@ export async function financeRoutes(app: FastifyInstance) {
       await assertRefs(db, a.companyId, { account_id: b.account_id, category_id: b.category_id }, { account_id: 'bank_accounts', category_id: 'finance_categories' });
       const cat = b.category_id ?? await categoryId(db, a.companyId, b.kind === 'tarifa' ? 'Tarifas bancárias' : b.kind === 'rendimento' ? 'Rendimentos de aplicação' : b.kind === 'juros' ? (b.amount < 0 ? 'Juros e multas pagos' : 'Juros e multas recebidos') : null as never);
       const r = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, category_id, ref_type, created_by) values ($1,$2,$3,$4,$5,$6,$7,'manual',$8) returning *`, [a.companyId, b.account_id, b.date ?? today(), b.amount, b.kind, b.description, cat, a.userId])).rows[0];
-      await audit(db, a, 'account_movement', r.id, 'create', null, r); return r;
+      await postMovement(db, r.id); await audit(db, a, 'account_movement', r.id, 'create', null, r); return r;
     });
     return reply.code(201).send(row);
   });
@@ -129,9 +132,9 @@ export async function financeRoutes(app: FastifyInstance) {
     const b = z.object({ customer_id: z.string().uuid().nullish().transform((v) => v ?? null), due_date: date, amount: z.coerce.number().positive().max(1e10), description: z.string().trim().min(3).max(200), category_id: z.string().uuid().nullish().transform((v) => v ?? null), method: text(30) }).parse(req.body);
     const r = await tx(async (db) => {
       await assertRefs(db, a.companyId, b, { customer_id: 'customers', category_id: 'finance_categories' });
-      const row = (await db.query(`insert into receivables (company_id, customer_id, installment_no, installments, due_date, amount, method, description, category_id, competence) values ($1,$2,1,1,$3,$4,$5,$6,$7,date_trunc('month',$3::date)::date) returning *`,
+      const row = (await db.query(`insert into receivables (company_id, customer_id, installment_no, installments, due_date, amount, method, description, category_id, competence) values ($1,$2,1,1,$3,$4,$5,$6,$7,date_trunc('month', current_date)::date) returning *`,
         [a.companyId, b.customer_id, b.due_date, b.amount, b.method ?? 'boleto', b.description, b.category_id ?? await categoryId(db, a.companyId, 'Outras receitas')])).rows[0];
-      await audit(db, a, 'receivable', row.id, 'create', null, row); return row;
+      await postReceivableCreated(db, row.id); await audit(db, a, 'receivable', row.id, 'create', null, row); return row;
     });
     return reply.code(201).send(r);
   });
@@ -186,6 +189,8 @@ export async function financeRoutes(app: FastifyInstance) {
       competence: date.optional(), first_due_date: date, amount: z.coerce.number().positive().max(1e10), installments: z.coerce.number().int().min(1).max(60).default(1), repeat_monthly: z.boolean().default(false) }).parse(req.body);
     const rows = await tx(async (db) => {
       await assertRefs(db, a.companyId, b, { supplier_id: 'suppliers', category_id: 'finance_categories', cost_center_id: 'cost_centers' });
+      const cat = (await db.query(`select c.kind, c.name, la.type from finance_categories c left join ledger_accounts la on la.id = c.ledger_account_id where c.id = $1`, [b.category_id])).rows[0];
+      if (cat.kind === 'estoque' || cat.type === 'passivo') throw new HttpError(422, `A categoria "${cat.name}" é reconhecida por fluxo próprio (NF de compra, DAS, comissões ou restituições) e não pode ser lançada como despesa avulsa.`, 'category_not_allowed');
       const n = b.installments; const base = Math.floor(b.amount / n * 100) / 100; const out = [];
       for (let k = 0; k < n; k++) {
         const amount = b.repeat_monthly ? b.amount : (k === n - 1 ? r2(b.amount - base * (n - 1)) : base);
@@ -193,6 +198,7 @@ export async function financeRoutes(app: FastifyInstance) {
         const comp = b.competence ? (await db.query(`select date_trunc('month', $1::date + ($2 || ' months')::interval)::date::text d`, [b.competence, String(k)])).rows[0].d : due.slice(0, 7) + '-01';
         out.push((await db.query(`insert into payables (company_id, supplier_id, installment_no, installments, due_date, amount, description, category_id, cost_center_id, competence, doc_number) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning *`,
           [a.companyId, b.supplier_id, k + 1, n, due, amount, b.description, b.category_id, b.cost_center_id, comp, b.doc_number])).rows[0]);
+        await postPayableCreated(db, out[out.length - 1].id);
       }
       await audit(db, a, 'payable', out[0].id, 'create', null, { count: n, amount: b.amount, repeat: b.repeat_monthly }); return out;
     });
@@ -343,6 +349,7 @@ export async function financeRoutes(app: FastifyInstance) {
       const amt = Number(l.amount); const cat = b.category_id ?? await categoryId(db, a.companyId, b.kind === 'tarifa' ? 'Tarifas bancárias' : b.kind === 'rendimento' ? 'Rendimentos de aplicação' : b.kind === 'juros' ? (amt < 0 ? 'Juros e multas pagos' : 'Juros e multas recebidos') : 'Outras despesas administrativas');
       const m = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, category_id, ref_type, ref_id, created_by) values ($1,$2,$3,$4,$5,$6,$7,'statement',$8,$9) returning id`,
         [a.companyId, l.account_id, l.line_date, amt, b.kind, b.description ?? l.description ?? 'Lançamento do extrato', cat, l.id, a.userId])).rows[0];
+      await postMovement(db, m.id);
       await db.query(`update bank_statement_lines set status = 'conciliado', movement_id = $2, reconciled_by = $3, reconciled_at = now() where id = $1`, [l.id, m.id, a.userId]);
       await audit(db, a, 'bank_statement', l.id, 'reconcile', null, { created_movement: m.id, kind: b.kind }); return { status: 'conciliado', movement_id: m.id };
     });
@@ -383,8 +390,8 @@ export async function financeRoutes(app: FastifyInstance) {
       if (b.other_account_id) await assertRefs(db, a.companyId, { o: b.other_account_id } as never, { o: 'bank_accounts' });
       const ref = (await db.query('select gen_random_uuid() id')).rows[0].id;
       const sign = b.type === 'sangria' ? -1 : 1;
-      const m = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,current_date,$3,$4,$5,'cash_session',$6,$7) returning id`, [a.companyId, s.account_id, sign * b.amount, b.type, b.note, id, a.userId])).rows[0];
-      if (b.other_account_id) await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,current_date,$3,'transferencia',$4,'cash_session',$5,$6)`, [a.companyId, b.other_account_id, -sign * b.amount, `${b.type === 'sangria' ? 'Sangria do caixa' : 'Suprimento ao caixa'}: ${b.note}`, id, a.userId]);
+      const m = (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,current_date,$3,$4,$5,'cash_session',$6,$7) returning id`, [a.companyId, s.account_id, sign * b.amount, b.type, b.note, id, a.userId])).rows[0]; await postMovement(db, m.id);
+      if (b.other_account_id) await postMovement(db, (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, ref_type, ref_id, created_by) values ($1,$2,current_date,$3,'transferencia',$4,'cash_session',$5,$6) returning id`, [a.companyId, b.other_account_id, -sign * b.amount, `${b.type === 'sangria' ? 'Sangria do caixa' : 'Suprimento ao caixa'}: ${b.note}`, id, a.userId])).rows[0].id);
       await audit(db, a, 'cash_session', id, b.type, null, { amount: b.amount, other: b.other_account_id, ref }); return { movement_id: m.id };
     });
     return reply.code(201).send(out);
@@ -395,7 +402,7 @@ export async function financeRoutes(app: FastifyInstance) {
       const s = (await db.query(`select * from cash_sessions where id = $1 and company_id = $2 and status = 'aberto' for update`, [id, a.companyId])).rows[0]; if (!s) throw new HttpError(404, 'Caixa aberto não encontrado.');
       const mv = Number((await db.query('select coalesce(sum(amount),0) s from account_movements where account_id = $1 and not reversed and created_at >= $2', [s.account_id, s.opened_at])).rows[0].s);
       const expected = r2(Number(s.opening_amount) + mv); const diff = r2(b.counted_amount - expected);
-      if (diff !== 0) await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, category_id, ref_type, ref_id, created_by) values ($1,$2,current_date,$3,'quebra_caixa',$4,$5,'cash_session',$6,$7)`, [a.companyId, s.account_id, diff, `Diferença de caixa no fechamento${b.note ? ': ' + b.note : ''}`, await categoryId(db, a.companyId, 'Quebra de caixa'), id, a.userId]);
+      if (diff !== 0) await postMovement(db, (await db.query(`insert into account_movements (company_id, account_id, movement_date, amount, kind, description, category_id, ref_type, ref_id, created_by) values ($1,$2,current_date,$3,'quebra_caixa',$4,$5,'cash_session',$6,$7) returning id`, [a.companyId, s.account_id, diff, `Diferença de caixa no fechamento${b.note ? ': ' + b.note : ''}`, await categoryId(db, a.companyId, 'Quebra de caixa'), id, a.userId])).rows[0].id);
       await db.query(`update cash_sessions set status = 'fechado', closed_by = $2, closed_at = now(), expected_amount = $3, counted_amount = $4, difference = $5 where id = $1`, [id, a.userId, expected, b.counted_amount, diff]);
       await audit(db, a, 'cash_session', id, 'close', null, { expected, counted: b.counted_amount, difference: diff }); return { expected, counted: b.counted_amount, difference: diff };
     });

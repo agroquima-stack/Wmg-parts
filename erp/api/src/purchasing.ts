@@ -5,6 +5,7 @@ import { audit } from './audit.js';
 import { applyMovement } from './stock.js';
 import { nextNumber } from './sales.js';
 import { categoryId } from './finance.js';
+import { postReceiving } from './accounting.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r4 = (n: number) => Math.round(n * 10000) / 10000;
@@ -158,6 +159,7 @@ export async function finishReceiving(db: PoolClient, a: Auth, id: string, accep
       [a.companyId, rec.supplier_id, id, k + 1, parcels.length, p.due_date, p.amount, `NF ${rec.nf_number}`, catCompra, rec.nf_number]);
   const note = all.size ? `Aceite com divergências: ${[...all].join(', ')}` : null;
   await db.query(`update receivings set status = 'concluido', finished_by = $2, finished_at = now(), divergence_note = $3 where id = $1`, [id, a.userId, note]);
+  await postReceiving(db, id);
   await audit(db, a, 'receiving', id, 'finish', { status: 'em_conferencia' }, { status: 'concluido', total_nf: rec.total_nf, divergences: [...all] });
   return { id, status: 'concluido', divergences: [...all], payables: parcels.length };
 }

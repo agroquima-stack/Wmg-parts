@@ -5,6 +5,7 @@ import { audit } from './audit.js';
 import { getPricingParams, resolvePrice } from './pricing.js';
 import { applyMovement } from './stock.js';
 import { autoSettleSaleReceivable, categoryId } from './finance.js';
+import { postSale, postSaleCancel } from './accounting.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 export const SALE_TYPES = ['balcao', 'atacado', 'b2b', 'recorrente', 'externo', 'online'] as const;
@@ -170,6 +171,7 @@ export async function confirmSale(db: PoolClient, a: Auth, saleId: string, payme
       unitCost: Number(it.unit_cost), documentType: 'venda', documentRef: String(sale.number), reason: 'Venda' });
   const commission = r2(total * Number(sale.commission_pct) / 100);
   await db.query(`update sales set status = 'concluida', confirmed_at = now(), commission_amount = $2 where id = $1`, [saleId, commission]);
+  await postSale(db, saleId);
   await audit(db, a, 'sale', saleId, 'confirm', { status: 'aberto' }, { status: 'concluida', total, commission, payments });
   return { id: saleId, number: sale.number, status: 'concluida', total, commission_amount: commission };
 }
@@ -190,6 +192,12 @@ export async function cancelSale(db: PoolClient, a: Auth, saleId: string, reason
     const qty = Number(it.qty);
     if (sale.status === 'concluida') await applyMovement(db, a, { ...doc, branchId: sale.branch_id, productId: it.product_id, type: 'devolucao_venda', qty, from: null, to: 'disponivel' });
     else await applyMovement(db, a, { ...doc, branchId: sale.branch_id, productId: it.product_id, type: 'liberacao', qty, from: 'reservado', to: 'disponivel' });
+  }
+  const { refund } = sale.status === 'concluida' ? await postSaleCancel(db, saleId) : { refund: 0 };
+  if (refund > 0) {
+    const cust = sale.customer_id ? (await db.query('select legal_name from customers where id = $1', [sale.customer_id])).rows[0] : null;
+    await db.query(`insert into payables (company_id, due_date, amount, description, category_id, competence, doc_number) values ($1, current_date, $2, $3, $4, date_trunc('month', current_date)::date, $5)`,
+      [a.companyId, refund, `Restituição ao cliente${cust ? ' ' + cust.legal_name : ''} — venda nº ${sale.number}`, await categoryId(db, a.companyId, 'Restituições a clientes'), `REST-${sale.number}`]);
   }
   await db.query(`update receivables set status = case when status = 'pago' then 'estornado' else 'cancelado' end where sale_id = $1`, [saleId]);
   await db.query(`update sale_approvals set status = 'recusado', decided_by = $2, decided_at = now(), note = 'Venda cancelada' where sale_id = $1 and status = 'pendente'`, [saleId, a.userId]);

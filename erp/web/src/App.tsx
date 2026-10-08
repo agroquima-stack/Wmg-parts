@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { api, get } from './api';
 import { AuthProvider, useAuth } from './auth';
+import { BalanceSheet, Chart, Checks, Dre, Entries, TrialBalance } from './accounting';
 import { FiscalSettings, Invoices, PendingSales, Taxes, Xmls } from './fiscal';
 import { Banks, CashFlow, Commissions, FinanceSettings, Payables, Receivables, Reconciliation } from './finance';
 import { PriceCompare, PurchaseOrders, Quotations, Receivings, Suggestions, SupplierReturns } from './purchasing';
@@ -53,6 +54,7 @@ const NAV: { group: string; items: [string, string, string][] }[] = [
   { group: 'Financeiro', items: [['/financeiro/receber', 'Contas a receber', 'finance:view'], ['/financeiro/pagar', 'Contas a pagar', 'finance:view'], ['/financeiro/bancos', 'Bancos e caixa', 'finance:view'], ['/financeiro/conciliacao', 'Conciliação bancária', 'finance:view'],
     ['/financeiro/fluxo', 'Fluxo de caixa', 'finance:view'], ['/financeiro/comissoes', 'Comissões', 'finance:view'], ['/financeiro/config', 'Configurações', 'finance:view']] },
   { group: 'Fiscal', items: [['/fiscal/notas', 'Notas fiscais', 'fiscal:view'], ['/fiscal/pendentes', 'Vendas sem nota', 'fiscal:view'], ['/fiscal/impostos', 'Impostos (DAS)', 'fiscal:view'], ['/fiscal/xmls', 'XMLs', 'fiscal:view'], ['/fiscal/config', 'Configurações fiscais', 'fiscal:view']] },
+  { group: 'Controladoria', items: [['/contabil/dre', 'DRE', 'accounting:view'], ['/contabil/balanco', 'Balanço patrimonial', 'accounting:view'], ['/contabil/balancete', 'Balancete e centros de custo', 'accounting:view'], ['/contabil/lancamentos', 'Lançamentos', 'accounting:view'], ['/contabil/plano', 'Plano de contas', 'accounting:view'], ['/contabil/verificacoes', 'Verificações', 'accounting:view']] },
   { group: 'Estoque', items: [['/estoque', 'Saldos', 'stock:view'], ['/estoque/movimentos', 'Movimentações', 'stock:view'], ['/estoque/transferencias', 'Transferências', 'stock:view'],
     ['/estoque/inventario', 'Inventário', 'stock:view'], ['/estoque/analises', 'Parados e curva ABC', 'stock:view']] },
   { group: 'Administração', items: [['/filiais', 'Filiais e dados fiscais', 'branches:view'], ['/usuarios', 'Usuários', 'users:view'], ['/perfis', 'Perfis e permissões', 'roles:view'], ['/auditoria', 'Auditoria', 'audit:view']] },
@@ -83,6 +85,7 @@ function Shell() {
         <Route path="/financeiro/receber" element={<Receivables />} /><Route path="/financeiro/pagar" element={<Payables />} /><Route path="/financeiro/bancos" element={<Banks />} /><Route path="/financeiro/conciliacao" element={<Reconciliation />} />
         <Route path="/financeiro/fluxo" element={<CashFlow />} /><Route path="/financeiro/comissoes" element={<Commissions />} /><Route path="/financeiro/config" element={<FinanceSettings />} />
         <Route path="/fiscal/notas" element={<Invoices />} /><Route path="/fiscal/pendentes" element={<PendingSales />} /><Route path="/fiscal/impostos" element={<Taxes />} /><Route path="/fiscal/xmls" element={<Xmls />} /><Route path="/fiscal/config" element={<FiscalSettings />} />
+        <Route path="/contabil/dre" element={<Dre />} /><Route path="/contabil/balanco" element={<BalanceSheet />} /><Route path="/contabil/balancete" element={<TrialBalance />} /><Route path="/contabil/lancamentos" element={<Entries />} /><Route path="/contabil/plano" element={<Chart />} /><Route path="/contabil/verificacoes" element={<Checks />} />
         <Route path="/estoque" element={<StockPage />} /><Route path="/estoque/movimentos" element={<Movements />} /><Route path="/estoque/transferencias" element={<Transfers />} />
         <Route path="/estoque/inventario" element={<Inventories />} /><Route path="/estoque/analises" element={<StockAnalysis />} />
         <Route path="/filiais" element={<Branches />} /><Route path="/usuarios" element={<Users />} /><Route path="/perfis" element={<Roles />} /><Route path="/auditoria" element={<Audit />} />

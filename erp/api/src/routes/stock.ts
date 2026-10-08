@@ -5,6 +5,7 @@ import { can, HttpError, type Auth } from '../auth.js';
 import { audit } from '../audit.js';
 import { pageParams } from '../crud.js';
 import { applyMovement, STATUSES, type Status } from '../stock.js';
+import { postStockAdjustment } from '../accounting.js';
 import { text } from '../schemas.js';
 
 /** Filial efetiva: a informada ou a da sessão; precisa estar entre as permitidas ao usuário. */
@@ -138,6 +139,7 @@ export async function stockRoutes(app: FastifyInstance) {
         branchId, productId: body.product_id, type, qty: body.qty, from: op.from, to: op.to,
         unitCost: body.unit_cost, updateCost: body.op === 'entrada' && body.unit_cost != null && body.update_cost !== false,
         documentType: body.document_type, documentRef: body.document_ref, origin: body.origin, destination: body.destination, reason: body.reason });
+      await postStockAdjustment(db, m.id);
       if (type === 'ajuste' || type === 'avaria' || type === 'bloqueio' || (type === 'saida' && body.reason))
         await audit(db, a, 'stock_movement', String(m.id), type, null, m);
       return m;
@@ -298,8 +300,9 @@ export async function stockRoutes(app: FastifyInstance) {
       for (const it of items) {
         const diff = Number(it.counted_qty) - Number(it.system_qty);
         const value = Math.abs(diff) * Number(it.cost_avg);
-        await applyMovement(db, a, { branchId: inv.branch_id, productId: it.product_id, type: 'inventario', qty: Math.abs(diff),
+        const mv = await applyMovement(db, a, { branchId: inv.branch_id, productId: it.product_id, type: 'inventario', qty: Math.abs(diff),
           from: diff < 0 ? 'disponivel' : null, to: diff > 0 ? 'disponivel' : null, documentType: 'inventario', documentRef: id, reason: `Acerto de inventário (${inv.type})` });
+        await postStockAdjustment(db, mv.id);
         if (diff > 0) gain += value; else loss += value;
       }
       await db.query(`update inventories set status = 'fechado', closed_by = $2, closed_at = now() where id = $1`, [id, a.userId]);
