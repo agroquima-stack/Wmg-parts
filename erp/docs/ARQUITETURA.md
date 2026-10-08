@@ -95,7 +95,8 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 | 6 Fiscal | NF-e/NFC-e via provedor, parametrização tributária (validada por contador), guias | |
 | 7 Controladoria | plano de contas, centros de custo, DRE, balanço | **feito** |
 | 8 BI | painéis comercial/estoque/compras/financeiro, visão do dono, metas | **feito** |
-| 9 IA · 10 Ecossistema | alertas, "Pergunte à Empresa", previsão, WhatsApp, marketplaces | |
+| 9 Inteligência | central de alertas por regras, "Pergunte à Empresa" (sem IA externa), previsão de demanda, recomendações | **feito** |
+| 10 Ecossistema | WhatsApp, e-commerce/marketplaces, app, integrações | |
 
 ## 8. Wireframes (desktop)
 
@@ -200,6 +201,14 @@ Stateless API (escala horizontal atrás de balanceador); sessão no banco (migr�
 - **Estoque**: valor, giro (CMV 90d anualizado ÷ estoque), cobertura, ABC, rupturas, excesso e parados. **Compras**: fornecedores (prazo/pontualidade), variação de preço, economia, pedidos abertos. **Financeiro**: caixa, aging, inadimplência, PMR/PMP, fluxo 30/60/90 (estimativa com confiança), resultado 6 meses.
 - Gráficos em SVG próprio com tooltip, legenda e alternância para tabela.
 - Limitações: giro/previsões dependem do histórico disponível; DAS é estimativa; sem exportação agendada de relatórios.
+
+## Fase 9 — Inteligência (como funciona)
+- **Decisões**: alertas ficam **dentro do sistema** (sem e-mail/WhatsApp até a Fase 10); **sem IA externa** (não há chave de API). "Inteligência" aqui = regras objetivas + estatística simples + consultas fixas, sempre mostrando a origem do número.
+- **Central de alertas** (`alerts`, `alert_rules`): 14 regras (ruptura, abaixo do mínimo, estoque parado, venda abaixo da margem mínima, meta de faturamento/margem em risco, cliente comprando menos, inadimplência, contas a pagar, caixa projetado negativo, extrato sem conciliar, fornecedor aumentou preço, aprovações paradas, notas rejeitadas/rascunhos). Cada alerta tem identificador estável (`fingerprint`): reexecutar não duplica, o alerta **fecha sozinho** quando o problema some e reabre se voltar. Reconhecer/adiar/reabrir são auditados; adiamento vence sozinho. Limites de cada regra e liga/desliga em Alertas → Regras (validados). Alertas de meta só existem se houver meta cadastrada. Atualiza sozinho a cada 5 min ao abrir a tela; sino na barra superior.
+- **Previsão de demanda**: média móvel ponderada de 12 semanas + tendência amortecida (limitada a ±50% da média); **sem sazonalidade** (exigiria 24+ meses). Confiança baixa/média/alta pelo histórico e a nota explica o motivo. Cobertura e data estimada de ruptura; compra sugerida vem do mesmo motor da sugestão de compra.
+- **Recomendações**: comprar, girar estoque parado (até o preço mínimo do cadastro), rever preço (margem alvo sobre o custo médio) e cobrar — cada uma com a base do cálculo. São sugestões; nada é executado automaticamente.
+- **Pergunte à Empresa**: interpretador por regras (palavras-chave normalizadas) → consulta fixa no banco → resposta com tabela, origem e link. ~18 intenções (vendas, lucro, vendedor, cliente, produto, caixa, a pagar, impostos, estoque, parado, comprar, ruptura, fornecedor, margem, alertas, produto por SKU). Período entendido: hoje, ontem, semana, este mês, mês passado, ano, "últimos N dias". O que não entende, diz que não entendeu (registrado em `ask_log` para ampliar o catálogo).
+- Limitações: perguntas fora do catálogo não são respondidas; previsão sem sazonalidade e com pouco histórico tem confiança baixa; sem notificação fora do sistema; regras não consideram promoções/eventos futuros.
 
 ## Perguntas em aberto
 - Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.
