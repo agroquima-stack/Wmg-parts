@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { pool, tx, type Db } from '../db.js';
 import { config } from '../config.js';
 import { can, HttpError, type Auth } from '../auth.js';
+import { waLink } from '../lib/whatsapp.js';
 import { audit } from '../audit.js';
 import { pageParams } from '../crud.js';
 import { resolvePrice } from '../pricing.js';
@@ -57,10 +58,6 @@ async function convertQuote(db: import('pg').PoolClient, a: Auth, quoteId: strin
   return sale;
 }
 
-const waLink = (phone: string | null, text: string) => {
-  const d = (phone ?? '').replace(/\D/g, ''); if (d.length < 10) return null;
-  return `https://wa.me/${d.length <= 11 ? '55' + d : d}?text=${encodeURIComponent(text)}`;
-};
 
 export async function quoteRoutes(app: FastifyInstance) {
   app.post('/quotes', async (req, reply) => {

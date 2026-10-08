@@ -2,6 +2,7 @@ import { pool, type Db } from './db.js';
 import { cashflow } from './finance.js';
 import { commercial, goalFor } from './bi.js';
 import { suggestions, type Suggestion } from './purchasing.js';
+import { getPricingParams } from './pricing.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -118,6 +119,18 @@ export const RULES: RuleDef[] = [
         select s.legal_name as sup, s.id as sid, p.id as pid, p.sku, l.price, prev.avgp, (l.price / prev.avgp - 1) * 100 as pct from last l join prev on prev.supplier_id = l.supplier_id and prev.product_id = l.product_id
         join suppliers s on s.id = l.supplier_id join products p on p.id = l.product_id where prev.avgp > 0 and (l.price / prev.avgp - 1) * 100 >= $2 and l.created_at >= now() - interval '90 days' order by pct desc limit 30`, [c, p.pct]);
       return r.rows.map((x) => ({ fingerprint: `preco:${x.sid}:${x.pid}`, severity: 'atencao', title: `${x.sup} subiu ${r1(Number(x.pct))}% em ${x.sku}`, detail: `Último ${brl(Number(x.price))} contra média anterior ${brl(Number(x.avgp))}. Compare fornecedores.`, link: '/compras/precos', value: r1(Number(x.pct)) }) as Candidate);
+    } },
+  { key: 'marketplace', area: 'Marketplace', label: 'Marketplace: repasse atrasado ou anúncio no prejuízo', description: 'Repasses esperados e não recebidos; anúncios com margem negativa após comissão, taxas e frete.',
+    params: { grace_days: { label: 'Tolerância de repasse (dias)', default: 3, min: 0, max: 60 } },
+    async run(db, c, p) {
+      const out: Candidate[] = [];
+      const late = (await db.query(`select count(*)::int as n, coalesce(sum(expected_net),0) as v, max(current_date - payout_date)::int as d from marketplace_orders where company_id = $1 and status = 'a_receber' and payout_date < current_date - $2::int`, [c, p.grace_days])).rows[0];
+      if (late.n > 0) out.push({ fingerprint: 'mkt:repasse', severity: 'atencao', title: `${late.n} repasse(s) de marketplace atrasado(s): ${brl(Number(late.v))} (até ${late.d} dia(s))`, detail: 'Confira o painel do marketplace e registre o recebimento.', link: '/marketplace/pedidos', value: Number(late.v) });
+      const neg = (await db.query(`select m.name, p.sku, l.price, p.id as pid, m.id as mid, coalesce(nullif(p.cost_avg,0), p.cost_current) as cost, m.commission_pct, m.fixed_fee, m.shipping_cost from marketplace_listings l join marketplaces m on m.id = l.marketplace_id join products p on p.id = l.product_id where l.company_id = $1 and l.active and m.active`, [c])).rows;
+      const tax = (await getPricingParams(db, c)).tax_pct;
+      for (const x of neg) { const price = Number(x.price); const margin = price - price * tax / 100 - price * Number(x.commission_pct) / 100 - Number(x.fixed_fee) - Number(x.shipping_cost) - Number(x.cost);
+        if (margin < 0) out.push({ fingerprint: `mkt:prejuizo:${x.mid}:${x.pid}`, severity: 'critico', title: `${x.sku} dá prejuízo em ${x.name}: ${brl(margin)} por unidade`, detail: `Preço ${brl(price)} não cobre custo, comissão, taxas e frete.`, link: '/marketplace/anuncios', value: margin }); }
+      return out;
     } },
   { key: 'aprovacoes', area: 'Comercial', label: 'Aprovações de venda paradas', description: 'Pedidos aguardando aprovação do gestor.',
     params: { hours: { label: 'Parado há mais de (horas)', default: 24, min: 1, max: 720 } },

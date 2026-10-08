@@ -9,7 +9,7 @@ import { postSale, postSaleCancel } from './accounting.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 export const SALE_TYPES = ['balcao', 'atacado', 'b2b', 'recorrente', 'externo', 'online'] as const;
-export const METHODS = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito', 'boleto', 'crediario'] as const;
+export const METHODS = ['dinheiro', 'pix', 'cartao_debito', 'cartao_credito', 'boleto', 'crediario', 'marketplace'] as const;
 const CASH = ['dinheiro', 'pix', 'cartao_debito'];
 
 export interface ItemIn { product_id: string; qty: number; discount_pct?: number; fixed_unit_price?: number }
@@ -131,7 +131,8 @@ export async function createSale(db: PoolClient, a: Auth, i: CreateSaleInput) {
 export interface PaymentIn { method: (typeof METHODS)[number]; amount: number; installments?: number }
 
 /** Conclui a venda: valida pagamentos/crédito, baixa estoque reservado, gera contas a receber e comissão. */
-export async function confirmSale(db: PoolClient, a: Auth, saleId: string, payments: PaymentIn[]) {
+export async function confirmSale(db: PoolClient, a: Auth, saleId: string, payments: PaymentIn[], opts: { allowMarketplace?: boolean } = {}) {
+  if (!opts.allowMarketplace && payments.some((p) => p.method === 'marketplace')) throw new HttpError(422, 'A forma "marketplace" só é usada por pedidos importados do marketplace.');
   const sale = (await db.query('select * from sales where id = $1 and company_id = $2 for update', [saleId, a.companyId])).rows[0];
   if (!sale) throw new HttpError(404, 'Venda não encontrada.');
   if (sale.status === 'aguardando_aprovacao') throw new HttpError(409, 'Venda aguardando aprovação do gestor.', 'approval_pending');

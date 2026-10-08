@@ -3,6 +3,7 @@ import { api, ApiError, brl, get, pct, qs } from './api';
 import { useAuth } from './auth';
 import { CustomerPicker } from './commercial';
 import { Modal } from './DataPage';
+import { WhatsAppButton } from './share';
 
 const date = (v: any) => (v ? String(v).slice(0, 10).split('-').reverse().join('/') : '—');
 const num = (v: any) => Number(v ?? 0);
@@ -49,7 +50,7 @@ function TitleDetail({ kind, id, onClose }: { kind: 'receivable' | 'payable'; id
         <td>{!s.reversed_at && can('finance:approve') && <button className="danger" onClick={() => confirm('Estornar esta baixa?') && run(() => api('POST', `/settlements/${s.id}/reverse`))}>estornar</button>}</td></tr>)}
       {!t.settlements.length && <tr><td colSpan={8} className="muted">Sem baixas.</td></tr>}</tbody></table>
     <Err e={err} />
-    <div className="right">{open && kind === 'payable' && t.kind === 'titulo' && t.supplier_id && can('finance:edit') && <button onClick={async () => { const cr = await get('/payables' + qs({ kind: 'credito', supplier_id: t.supplier_id, status: 'aberto' })); if (!cr.items.length) return setErr('Fornecedor sem créditos em aberto.'); setCredit(cr.items[0]); }}>Compensar crédito</button>}
+    <div className="right">{open && kind === 'receivable' && t.customer_id && <WhatsAppButton kind="receivable" id={id} label={t.overdue || String(t.due_date).slice(0, 10) < new Date().toISOString().slice(0, 10) ? 'Cobrar por WhatsApp' : 'Lembrete por WhatsApp'} />}{open && kind === 'payable' && t.kind === 'titulo' && t.supplier_id && can('finance:edit') && <button onClick={async () => { const cr = await get('/payables' + qs({ kind: 'credito', supplier_id: t.supplier_id, status: 'aberto' })); if (!cr.items.length) return setErr('Fornecedor sem créditos em aberto.'); setCredit(cr.items[0]); }}>Compensar crédito</button>}
       {open && t.kind !== 'credito' && can('finance:delete') && !t.sale_id && !t.receiving_id && <button className="danger" onClick={() => { const reason = prompt('Motivo do cancelamento:'); if (reason) run(() => api('POST', `/${base}/${id}/cancel`, { reason })); }}>Cancelar título</button>}
       {open && t.kind !== 'credito' && can('finance:edit') && <button className="primary" onClick={() => setSettle(true)}>{kind === 'receivable' ? 'Receber' : 'Pagar'}</button>}<button onClick={onClose}>Fechar</button></div>
     {settle && <SettleModal kind={kind} id={id} onClose={() => setSettle(false)} onDone={() => { setSettle(false); load(); }} />}

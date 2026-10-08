@@ -21,6 +21,8 @@ import { fiscalRoutes } from './routes/fiscal.js';
 import { accountingRoutes } from './routes/accounting.js';
 import { biRoutes } from './routes/bi.js';
 import { intelligenceRoutes } from './routes/intelligence.js';
+import { marketplaceRoutes } from './routes/marketplace.js';
+import { shareRoutes } from './routes/share.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000 });
@@ -69,5 +71,7 @@ export async function buildApp() {
   await app.register(accountingRoutes);
   await app.register(biRoutes);
   await app.register(intelligenceRoutes);
+  await app.register(marketplaceRoutes);
+  await app.register(shareRoutes);
   return app;
 }

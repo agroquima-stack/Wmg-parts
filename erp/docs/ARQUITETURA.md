@@ -96,7 +96,7 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 | 7 Controladoria | plano de contas, centros de custo, DRE, balanço | **feito** |
 | 8 BI | painéis comercial/estoque/compras/financeiro, visão do dono, metas | **feito** |
 | 9 Inteligência | central de alertas por regras, "Pergunte à Empresa" (sem IA externa), previsão de demanda, recomendações | **feito** |
-| 10 Ecossistema | WhatsApp, e-commerce/marketplaces, app, integrações | |
+| 10 Ecossistema | marketplace (estrutura sem integração), WhatsApp por link | **feito (parcial por decisão)** — app do representante, loja online e WhatsApp integrado adiados |
 
 ## 8. Wireframes (desktop)
 
@@ -209,6 +209,13 @@ Stateless API (escala horizontal atrás de balanceador); sessão no banco (migr�
 - **Recomendações**: comprar, girar estoque parado (até o preço mínimo do cadastro), rever preço (margem alvo sobre o custo médio) e cobrar — cada uma com a base do cálculo. São sugestões; nada é executado automaticamente.
 - **Pergunte à Empresa**: interpretador por regras (palavras-chave normalizadas) → consulta fixa no banco → resposta com tabela, origem e link. ~18 intenções (vendas, lucro, vendedor, cliente, produto, caixa, a pagar, impostos, estoque, parado, comprar, ruptura, fornecedor, margem, alertas, produto por SKU). Período entendido: hoje, ontem, semana, este mês, mês passado, ano, "últimos N dias". O que não entende, diz que não entendeu (registrado em `ask_log` para ampliar o catálogo).
 - Limitações: perguntas fora do catálogo não são respondidas; previsão sem sazonalidade e com pouco histórico tem confiança baixa; sem notificação fora do sistema; regras não consideram promoções/eventos futuros.
+
+## Fase 10 — Ecossistema (como funciona)
+- **Decisões**: app do representante, loja online/B2B com login do cliente e WhatsApp integrado foram **adiados**; WhatsApp **só por link** (wa.me). Marketplace: ainda sem canal definido, então a estrutura é **independente de canal** e **sem integração** (pedidos entram por lançamento, anúncios saem em planilha CSV).
+- **Venda externa (atacado e varejo)**: usa o que já existe — vendas tipo `externo`/`atacado`, tabelas de preço por cliente/quantidade/canal, alçada de desconto, regras fiscais para CPF e CNPJ, comissão por vendedor.
+- **Marketplace** (`marketplaces`, `marketplace_listings`, `marketplace_orders`): canal com comissão %, taxa fixa por pedido, frete médio e prazo de repasse. Anúncio = preço por produto/canal; o sistema mostra a **margem real** (preço − imposto estimado − comissão − taxa − frete − custo), o preço para a margem alvo, a quantidade publicável (disponível − reserva de segurança) e baixa/prejuízo. **Pedido** do canal vira venda concluída (`channel=marketplace`, baixa estoque, custo, margem, contabilidade) com recebível vencendo no repasse esperado; preço abaixo da margem mínima exige gestor. **Repasse**: baixa pelo valor cheio e lança as taxas reais como despesa (taxa de recebimento); repasse atrasado move o vencimento sem juros/multa. Cancelar antes do repasse devolve o estoque. Resumo por canal com margem após taxas. Alertas: repasse atrasado e anúncio no prejuízo.
+- **WhatsApp por link**: cobrança (valor atualizado com multa/juros do padrão da empresa), lembrete de vencimento e confirmação de pedido; cotação já tinha o link público. O sistema só monta o texto e abre a conversa (quem envia é a pessoa); sem telefone, mostra o texto para copiar. Cada geração é auditada.
+- Limitações: sem integração automática (pedidos/estoque/preço não sincronizam sozinhos); devolução de pedido já repassado é manual; margem do BI por venda não inclui comissão/frete do canal (o resumo do marketplace inclui); taxa fixa e frete são por pedido, na análise de anúncio considera-se 1 unidade.
 
 ## Perguntas em aberto
 - Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api, ApiError, brl, get, pct, qs } from './api';
 import { useAuth } from './auth';
 import { DataPage, Modal } from './DataPage';
+import { WhatsAppButton } from './share';
 
 const n = (v: any) => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 const date = (v: any) => (v ? new Date(v).toLocaleDateString('pt-BR') : '—');
@@ -147,6 +148,7 @@ function SaleDetail({ id, onClose }: { id: string; onClose(): void }) {
       <button className="primary" onClick={() => run(() => api('POST', `/sales/${id}/confirm`, { payments: pays.map((p) => ({ method: p.method, amount: Number(p.amount), installments: Number(p.installments) || 1 })) }))}>Confirmar pagamento e baixar estoque</button></div>}
     {err && <div className="err">{err}</div>}
     <div className="right">
+      {s.status !== 'cancelada' && s.customer_name && <WhatsAppButton kind="sale" id={id} label="Enviar pedido por WhatsApp" />}
       {can('sales:create') && s.status !== 'cancelada' && <button onClick={() => run(async () => { const r = await api('POST', `/sales/${id}/repeat`); alert(`Novo pedido nº ${r.number} criado.`); })}>Repetir pedido</button>}
       {s.status !== 'cancelada' && can('sales:edit') && <button className="danger" onClick={() => { const reason = prompt('Motivo do cancelamento:'); if (reason) run(() => api('POST', `/sales/${id}/cancel`, { reason })); }}>Cancelar</button>}
       {ap && can('sales:approve') && ap.requested_by !== me?.user.id && <><button onClick={() => run(() => api('POST', `/approvals/${ap.id}/reject`, { note: prompt('Motivo da recusa:') ?? '' }))}>Recusar</button><button className="primary" onClick={() => run(() => api('POST', `/approvals/${ap.id}/approve`, {}))}>Aprovar</button></>}
