@@ -169,6 +169,19 @@ export async function searchRoutes(app: FastifyInstance) {
       if (Number(f.receivable_overdue) > 0) alerts.unshift({ level: 'red', text: `R$ ${Number(f.receivable_overdue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em contas a receber vencidas (${f.customers_overdue} cliente(s) inadimplente(s)).` });
       if (f.statement_pending) alerts.push({ level: 'yellow', text: `${f.statement_pending} linha(s) de extrato bancário pendentes de conciliação.` });
     }
-    return { counts, alerts, stock, commercial, purchasing, finance };
+    let fiscal = null;
+    if (a.permissions.has('fiscal:view')) {
+      const k = (await pool.query(`select
+        (select count(*)::int from sales s where s.company_id = $1 and s.status = 'concluida' and not exists (select 1 from fiscal_documents d where d.sale_id = s.id and d.kind = 'venda' and d.status in ('rascunho','autorizada'))) as sales_without_invoice,
+        (select count(*)::int from fiscal_documents where company_id = $1 and status = 'rascunho' and jsonb_array_length(validation->'errors') > 0) as drafts_with_errors,
+        (select count(*)::int from fiscal_documents where company_id = $1 and status = 'rejeitada') as rejected,
+        (select count(*)::int from fiscal_documents where company_id = $1 and status = 'autorizada' and not simulated and created_at >= date_trunc('month', now())) as issued_month`, [c])).rows[0];
+      const das = (await pool.query(`select due_date::text, status, coalesce(amount, estimated_amount) as value from tax_obligations where company_id = $1 and tax = 'DAS' and status in ('previsto','a_pagar') order by due_date limit 1`, [c])).rows[0] ?? null;
+      fiscal = { ...k, next_das: das };
+      if (k.sales_without_invoice) alerts.push({ level: 'yellow', text: `${k.sales_without_invoice} venda(s) concluída(s) sem nota fiscal.` });
+      if (k.rejected) alerts.unshift({ level: 'red', text: `${k.rejected} nota(s) fiscal(is) rejeitada(s) aguardando correção.` });
+      if (das) { const days = Math.ceil((Date.parse(das.due_date) - Date.now()) / 86400000); if (days <= 7) alerts.push({ level: days < 0 ? 'red' : 'yellow', text: `DAS ${days < 0 ? 'vencido há ' + -days : 'vence em ' + days} dia(s): R$ ${Number(das.value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.` }); }
+    }
+    return { counts, alerts, stock, commercial, purchasing, finance, fiscal };
   });
 }

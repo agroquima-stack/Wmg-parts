@@ -86,7 +86,8 @@ export async function salesRoutes(app: FastifyInstance) {
       pool.query(`select i.*, p.sku, p.description, round((i.unit_price - i.unit_cost) / nullif(i.unit_price,0) * 100, 2) as margin_pct from sale_items i join products p on p.id = i.product_id where i.sale_id = $1 order by p.description`, [id]),
       pool.query('select * from sale_payments where sale_id = $1', [id]), pool.query('select * from receivables where sale_id = $1 order by installment_no, due_date', [id]),
       pool.query(`select ap.*, r.name as requested_by_name, d.name as decided_by_name from sale_approvals ap join users r on r.id = ap.requested_by left join users d on d.id = ap.decided_by where ap.sale_id = $1 order by ap.requested_at`, [id])]);
-    return { ...s, items: items.rows, payments: payments.rows, receivables: receivables.rows, approvals: approvals.rows };
+    const fiscal = (await pool.query(`select id, kind, model, status, number, simulated from fiscal_documents where sale_id = $1 order by created_at`, [id])).rows;
+    return { ...s, items: items.rows, payments: payments.rows, receivables: receivables.rows, approvals: approvals.rows, fiscal };
   });
 
   app.post('/sales/:id/confirm', async (req) => {

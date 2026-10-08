@@ -22,7 +22,7 @@ export function Dashboard() {
   if (!d) return <p className="muted">Carregando…</p>;
   const k = (l: string, v: ReactNode, to?: string) => <div className="card kpi">{to ? <Link to={to}><div className="v">{v}</div></Link> : <div className="v">{v}</div>}<div className="l">{l}</div></div>;
   return <>
-    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Fiscal e contabilidade entram nas próximas fases.</p>
+    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Contabilidade (DRE e balanço) entra nas próximas fases.</p>
     <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Produtos ativos', d.counts.products_active, '/produtos')}{k('Clientes ativos', d.counts.customers_active, '/clientes')}
       {k('Fornecedores', d.counts.suppliers_active, '/fornecedores')}{k('Marcas', d.counts.brands, '/marcas')}{k('Modelos de moto', d.counts.vehicle_models, '/motos')}
@@ -37,6 +37,9 @@ export function Dashboard() {
     {d.finance && <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Saldo em caixa', brl(d.finance.cash_balance), '/financeiro/bancos')}{k('Saldo bancário', brl(d.finance.bank_balance), '/financeiro/bancos')}{k('A receber', brl(d.finance.receivable_open), '/financeiro/receber')}
       {k('A receber vencido', brl(d.finance.receivable_overdue), '/financeiro/receber')}{k('Menor saldo projetado (90 d)', brl(d.finance.projected_min.value), '/financeiro/fluxo')}</div>}
+    {d.fiscal && <div className="grid kpis" style={{ marginBottom: 18 }}>
+      {k('Vendas sem nota fiscal', d.fiscal.sales_without_invoice, '/fiscal/pendentes')}{k('Rascunhos com pendências', d.fiscal.drafts_with_errors, '/fiscal/notas')}{k('Notas rejeitadas', d.fiscal.rejected, '/fiscal/notas')}
+      {k('Próximo DAS', d.fiscal.next_das ? `${brl(d.fiscal.next_das.value)} · ${String(d.fiscal.next_das.due_date).split('-').reverse().join('/')}` : '—', '/fiscal/impostos')}</div>}
     {d.purchasing && <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Pedidos de compra abertos', d.purchasing.open_orders, '/compras/pedidos')}{k('Entregas atrasadas', d.purchasing.late_orders, '/compras/pedidos')}
       {k('Recebimentos em conferência', d.purchasing.receivings_open, '/compras/recebimento')}{k('A pagar em 7 dias', brl(d.purchasing.payables_7d))}{k('A pagar vencido', brl(d.purchasing.payables_overdue))}</div>}
@@ -61,7 +64,7 @@ const prodFields: Field[] = [
   { key: 'internal_code', label: 'Código interno', list: false }, { key: 'manufacturer_code', label: 'Cód. fabricante', list: true },
   { key: 'original_code', label: 'Cód. original', list: false },
   { key: 'barcodes_text', label: 'Códigos de barras', full: true, list: false, hint: 'Separe vários por vírgula' },
-  { key: 'unit', label: 'Unidade', list: false }, { key: 'ncm', label: 'NCM', list: false }, { key: 'cest', label: 'CEST', list: false },
+  { key: 'unit', label: 'Unidade', list: false }, { key: 'ncm', label: 'NCM', list: false }, { key: 'cest', label: 'CEST', list: false }, { key: 'csosn', label: 'CSOSN (vazio = 102)', type: 'select', options: ['101', '102', '103', '201', '202', '203', '300', '400', '500', '900'].map((v) => ({ value: v, label: v })), list: false, hint: 'Use 500/201 se o NCM estiver sujeito a ST (confirme com o contador)' },
   { key: 'origin', label: 'Origem (0-8)', type: 'number', list: false },
   { key: 'weight_kg', label: 'Peso (kg)', type: 'number', step: '0.001', list: false }, { key: 'height_cm', label: 'Altura (cm)', type: 'number', list: false },
   { key: 'width_cm', label: 'Largura (cm)', type: 'number', list: false }, { key: 'length_cm', label: 'Comprimento (cm)', type: 'number', list: false },
@@ -149,11 +152,14 @@ export const Suppliers = () => <DataPage title="Fornecedores" path="/suppliers" 
   ...address, { key: 'payment_terms_days', label: 'Prazo pgto (dias)', type: 'number', list: false }, { key: 'lead_time_days', label: 'Prazo entrega (dias)', type: 'number', list: false },
   { key: 'freight_type', label: 'Frete', type: 'select', options: [{ value: 'CIF', label: 'CIF' }, { value: 'FOB', label: 'FOB' }], list: false },
   { key: 'carrier', label: 'Transportadora', list: false }, { key: 'notes', label: 'Observações', type: 'textarea', list: false }, active]} />;
-export const Customers = () => <DataPage title="Clientes" path="/customers" perm="customers" extras={(row) => <CustomerButton id={row.id} />} fields={[
+export const Customers = () => <DataPage title="Clientes" path="/customers" perm="customers" extras={(row) => <CustomerButton id={row.id} />}
+  toForm={(r) => ({ ...r, final_consumer: r.final_consumer == null ? '' : String(r.final_consumer), ie_indicator: r.ie_indicator == null ? '' : String(r.ie_indicator) })}
+  fromForm={(b) => ({ ...b, final_consumer: b.final_consumer === 'true' ? true : b.final_consumer === 'false' ? false : null })} fields={[
   { key: 'type', label: 'Tipo', type: 'select', options: [{ value: 'PF', label: 'Pessoa física' }, { value: 'PJ', label: 'Pessoa jurídica' }], required: true, list: true },
   { key: 'legal_name', label: 'Nome / Razão social', required: true, list: true }, { key: 'trade_name', label: 'Nome fantasia', list: false },
   { key: 'document', label: 'CPF / CNPJ', list: true }, { key: 'ie', label: 'IE', list: false },
   ...address, { key: 'phone', label: 'Telefone', list: true }, { key: 'whatsapp', label: 'WhatsApp', list: false }, { key: 'email', label: 'E-mail', type: 'email', list: false },
+  { key: 'ie_indicator', label: 'Indicador de IE', type: 'select', options: [{ value: '1', label: '1 — Contribuinte' }, { value: '2', label: '2 — Isento' }, { value: '9', label: '9 — Não contribuinte' }], list: false, hint: 'Vazio = automático (PF = 9; PJ com IE = 1)' }, { key: 'city_ibge', label: 'Cód. IBGE do município', list: false }, { key: 'final_consumer', label: 'Consumidor final (vazio = automático pelo segmento)', type: 'select', options: [{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não (revenda)' }], list: false },
   { key: 'segment', label: 'Segmento', list: true }, { key: 'seller_id', label: 'Vendedor', optionsFrom: { path: '/users?is_seller=true', label: 'name' }, list: false },
   { key: 'price_table', label: 'Tabela de preço', type: 'select', options: ['varejo', 'oficina', 'atacado', 'revenda', 'especial'].map((v) => ({ value: v, label: v })), list: false },
   { key: 'credit_limit', label: 'Limite de crédito', type: 'number', step: '0.01', list: (r) => brl(r.credit_limit) },
@@ -219,3 +225,8 @@ function CustomerButton({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   return <div style={{ marginTop: 12 }}><button onClick={() => setOpen(true)}>Ver histórico, crédito e inadimplência</button>{open && <CustomerPanel id={id} onClose={() => setOpen(false)} />}</div>;
 }
+
+export const Branches = () => <DataPage title="Filiais e dados fiscais" subtitle="O emitente da nota é a filial da venda: CNPJ, IE, regime (CRT 1 = Simples Nacional) e endereço completo são obrigatórios para emitir." path="/branches" perm="branches" fields={[
+  { key: 'code', label: 'Código', required: true, list: true }, { key: 'name', label: 'Nome', required: true, list: true }, { key: 'cnpj', label: 'CNPJ', list: true }, { key: 'ie', label: 'Inscrição estadual', list: true }, { key: 'im', label: 'Inscrição municipal', list: false },
+  { key: 'crt', label: 'CRT (1 = Simples Nacional)', type: 'number', list: false }, { key: 'zip', label: 'CEP', list: false }, { key: 'street', label: 'Logradouro', list: false }, { key: 'number', label: 'Número', list: false }, { key: 'complement', label: 'Complemento', list: false }, { key: 'district', label: 'Bairro', list: false },
+  { key: 'city', label: 'Cidade', list: true }, { key: 'state', label: 'UF', type: 'select', options: UFS, list: true }, { key: 'city_ibge', label: 'Cód. IBGE do município', list: false }, { key: 'phone', label: 'Telefone', list: false }, { key: 'is_headquarters', label: 'Matriz', type: 'checkbox', list: false }, active]} />;

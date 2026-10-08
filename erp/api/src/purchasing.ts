@@ -39,7 +39,7 @@ export interface ReceivingItemIn {
 }
 export interface ReceivingIn {
   branchId: string; poId?: string | null; supplierId: string; source: 'xml' | 'manual'; nfNumber: string; nfSeries?: string | null; nfKey?: string | null; issueDate?: string | null;
-  freight?: number; insurance?: number; other?: number; discount?: number; ipiTotal?: number; totalNf?: number; installments?: { due_date: string; amount: number }[]; items: ReceivingItemIn[];
+  freight?: number; insurance?: number; other?: number; discount?: number; ipiTotal?: number; totalNf?: number; installments?: { due_date: string; amount: number }[]; xml?: string | null; items: ReceivingItemIn[];
 }
 
 /** Casa item do XML com produto: (1) código do fornecedor já mapeado, (2) EAN cadastrado, (3) código do fabricante igual ao cProd. */
@@ -79,10 +79,10 @@ export async function createReceiving(db: PoolClient, a: Auth, i: ReceivingIn) {
   const totalNf = i.totalNf ?? r2(productsTotal + ipiTotal + freight + ins + other - disc);
   const number = await nextNumber(db, a.companyId, 'receiving');
   const rec = (await db.query(
-    `insert into receivings (company_id, branch_id, number, po_id, supplier_id, source, nf_number, nf_series, nf_key, issue_date, freight, insurance, other_expenses, ipi_total, discount, total_products, total_nf, installments, created_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) returning *`,
+    `insert into receivings (company_id, branch_id, number, po_id, supplier_id, source, nf_number, nf_series, nf_key, issue_date, freight, insurance, other_expenses, ipi_total, discount, total_products, total_nf, installments, created_by, xml)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) returning *`,
     [a.companyId, i.branchId, number, i.poId ?? null, i.supplierId, i.source, i.nfNumber, i.nfSeries ?? null, i.nfKey ?? null, i.issueDate ?? null, freight, ins, other, ipiTotal, disc, productsTotal, totalNf,
-     i.installments?.length ? JSON.stringify(i.installments) : null, a.userId])).rows[0];
+     i.installments?.length ? JSON.stringify(i.installments) : null, a.userId, i.xml ?? null])).rows[0];
   for (const it of i.items) {
     const productId = await matchProduct(db, a.companyId, i.supplierId, it);
     if (productId) {

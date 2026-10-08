@@ -284,7 +284,7 @@ export async function purchasingRoutes(app: FastifyInstance) {
         await audit(db, a, 'supplier', String(sup.id), 'create', null, { via: 'importação de XML' });
       }
       return createReceiving(db, a, { branchId: await branchOf(db, a, b.branch_id), poId: b.po_id, supplierId: sup.id, source: 'xml', nfNumber: nfe.number, nfSeries: nfe.series, nfKey: nfe.key, issueDate: nfe.issue_date,
-        freight: nfe.totals.freight, insurance: nfe.totals.insurance, other: nfe.totals.other, discount: nfe.totals.discount, ipiTotal: nfe.totals.ipi, totalNf: nfe.totals.nf || undefined, installments: nfe.installments,
+        freight: nfe.totals.freight, insurance: nfe.totals.insurance, other: nfe.totals.other, discount: nfe.totals.discount, ipiTotal: nfe.totals.ipi, totalNf: nfe.totals.nf || undefined, installments: nfe.installments, xml: b.xml,
         items: nfe.items.map((i) => ({ supplier_code: i.supplier_code, ean: i.ean, description: i.description, ncm: i.ncm, cfop: i.cfop, unit: i.unit, qty: i.qty, unit_price: i.unit_price, ipi: i.ipi })) });
     });
     return reply.code(201).send(rec);

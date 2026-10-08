@@ -17,6 +17,7 @@ import { quoteRoutes } from './routes/quotes.js';
 import { b2bRoutes } from './routes/b2b.js';
 import { purchasingRoutes } from './routes/purchasing.js';
 import { financeRoutes } from './routes/finance.js';
+import { fiscalRoutes } from './routes/fiscal.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000 });
@@ -61,5 +62,6 @@ export async function buildApp() {
   await app.register(b2bRoutes);
   await app.register(purchasingRoutes);
   await app.register(financeRoutes);
+  await app.register(fiscalRoutes);
   return app;
 }

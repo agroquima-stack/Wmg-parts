@@ -16,6 +16,8 @@ Produção: `ADMIN_EMAIL=… ADMIN_PASSWORD=… COMPANY_NAME=… npm run bootstr
 Testes: `cd api && npm test` (integração, exige Postgres com a demo).
 
 ## Estado
+Fase 6 (Fiscal) pronta: documento fiscal (NF-e/NFC-e) com regras do Simples Nacional, validação, provedor intercambiável (manual e simulado), registro de nota emitida, cancelamento, CC-e, devolução, repositório de XMLs e painel do DAS (estimativa). Emissão com valor fiscal exige contratar um provedor.
+
 Fase 5 (Financeiro) pronta: contas a receber/pagar com baixa parcial e juros/multa padrão de mercado, bancos e caixa opcional, importação de extrato CSV e conciliação, fluxo de caixa (realizado, previsto e projetado), comissões de representantes. Exemplos em `api/samples/`.
 
 Fase 4 (Compras) pronta: sugestão automática de compra, cotações com comparação, pedidos (aprovação opcional), recebimento por XML de NF-e ou manual com conferência/divergências, custo médio global, contas a pagar (base), devolução ao fornecedor e comparação de fornecedores. NF-e de exemplo em `api/samples/`.

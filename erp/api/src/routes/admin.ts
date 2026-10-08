@@ -24,7 +24,8 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---- Filiais
   registerCrud(app, {
     path: '/branches', table: 'branches', entity: 'branch', perm: 'branches',
-    schema: z.object({ code: reqText(20), name: reqText(), cnpj: text(20), city: text(), state: uf,
+    schema: z.object({ code: reqText(20), name: reqText(), cnpj: z.string().trim().nullish().transform((v) => (v ? v.replace(/\D/g, '') : null)), city: text(), state: uf,
+      ie: text(20), im: text(20), crt: z.coerce.number().refine((v) => [1, 2, 3].includes(v)).optional(), street: text(), number: text(20), complement: text(), district: text(), zip: text(10), city_ibge: text(7), phone: text(20),
       is_headquarters: z.boolean().optional(), active: z.boolean().optional() }),
     searchCols: ['name', 'code', 'city'], orderBy: 't.is_headquarters desc, t.name', hasActive: true,
   });

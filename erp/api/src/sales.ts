@@ -182,6 +182,8 @@ export async function cancelSale(db: PoolClient, a: Auth, saleId: string, reason
   if (sale.status === 'concluida' && !a.permissions.has('sales:approve')) throw new HttpError(403, 'Cancelar venda concluída exige aprovação do gestor.');
   if (sale.status !== 'concluida' && sale.created_by !== a.userId && !a.permissions.has('sales:approve') && !a.permissions.has('sales:delete'))
     throw new HttpError(403, 'Apenas o autor ou um gestor cancela esta venda.');
+  const nf = await db.query(`select number, model from fiscal_documents where sale_id = $1 and kind = 'venda' and status = 'autorizada'`, [saleId]);
+  if (nf.rowCount) throw new HttpError(409, `Esta venda tem NF-e/NFC-e autorizada (nº ${nf.rows[0].number}): cancele a nota fiscal (ou emita devolução) antes de cancelar a venda.`, 'fiscal_document_active');
   const items = (await db.query('select * from sale_items where sale_id = $1', [saleId])).rows;
   const doc = { documentType: 'venda', documentRef: String(sale.number), reason: `Cancelamento: ${reason}` };
   for (const it of items) {
