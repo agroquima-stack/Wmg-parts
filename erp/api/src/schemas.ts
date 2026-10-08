@@ -73,7 +73,7 @@ export const productSchema = z.object({
   height_cm: z.coerce.number().min(0).nullish().transform((v) => v ?? null),
   width_cm: z.coerce.number().min(0).nullish().transform((v) => v ?? null),
   length_cm: z.coerce.number().min(0).nullish().transform((v) => v ?? null),
-  photo_url: text(500), active: z.boolean().optional(),
+  photo_url: text(500), active: z.boolean().optional(), warranty_days: z.coerce.number().int().min(0).max(3650).nullish().transform((v) => v ?? null),
   min_stock: optMoney, max_stock: optMoney, ideal_stock: optMoney, location: text(60),
   cost_current: optMoney, sale_price: optMoney, min_price: optMoney,
   min_margin_pct: z.coerce.number().min(0).max(99.99).optional(),

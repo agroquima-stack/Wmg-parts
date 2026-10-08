@@ -3,6 +3,7 @@ import { api, ApiError, brl, get, pct, qs } from './api';
 import { useAuth } from './auth';
 import { DataPage, Modal } from './DataPage';
 import { WhatsAppButton } from './share';
+import { ReturnModal } from './returns';
 
 const n = (v: any) => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 const date = (v: any) => (v ? new Date(v).toLocaleDateString('pt-BR') : '—');
@@ -127,7 +128,7 @@ export function Sales({ pending }: { pending?: boolean }) {
 }
 
 function SaleDetail({ id, onClose }: { id: string; onClose(): void }) {
-  const { me, can } = useAuth(); const [s, setS] = useState<any>(null); const [err, setErr] = useState(''); const [pays, setPays] = useState<any[]>([]);
+  const { me, can } = useAuth(); const [s, setS] = useState<any>(null); const [err, setErr] = useState(''); const [pays, setPays] = useState<any[]>([]); const [ret, setRet] = useState(false);
   const load = () => get('/sales/' + id).then((x) => { setS(x); setPays([{ method: 'pix', amount: String(x.total), installments: '1' }]); }); useEffect(() => { load(); }, [id]);
   if (!s) return null;
   const run = async (fn: () => Promise<any>) => { setErr(''); try { await fn(); await load(); } catch (e) { setErr((e as ApiError).message); } };
@@ -147,7 +148,9 @@ function SaleDetail({ id, onClose }: { id: string; onClose(): void }) {
       <input style={{ width: 80 }} type="number" min="1" title="Parcelas" value={p.installments} onChange={(e) => setPays(pays.map((x, y) => (y === k ? { ...x, installments: e.target.value } : x)))} /></div>)}
       <button className="primary" onClick={() => run(() => api('POST', `/sales/${id}/confirm`, { payments: pays.map((p) => ({ method: p.method, amount: Number(p.amount), installments: Number(p.installments) || 1 })) }))}>Confirmar pagamento e baixar estoque</button></div>}
     {err && <div className="err">{err}</div>}
+    {ret && <ReturnModal saleId={id} onClose={() => setRet(false)} onDone={() => { setRet(false); load(); }} />}
     <div className="right">
+      {s.status === 'concluida' && can('returns:approve') && <button onClick={() => setRet(true)}>Devolver itens</button>}
       {s.status !== 'cancelada' && s.customer_name && <WhatsAppButton kind="sale" id={id} label="Enviar pedido por WhatsApp" />}
       {can('sales:create') && s.status !== 'cancelada' && <button onClick={() => run(async () => { const r = await api('POST', `/sales/${id}/repeat`); alert(`Novo pedido nº ${r.number} criado.`); })}>Repetir pedido</button>}
       {s.status !== 'cancelada' && can('sales:edit') && <button className="danger" onClick={() => { const reason = prompt('Motivo do cancelamento:'); if (reason) run(() => api('POST', `/sales/${id}/cancel`, { reason })); }}>Cancelar</button>}

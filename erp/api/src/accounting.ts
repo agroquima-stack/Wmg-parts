@@ -228,6 +228,48 @@ export async function postStockAdjustment(db: Db, stockMovementId: number | stri
   await post(db, m.company_id, { date: m.d, description: `Estoque — ${kind === 'abertura' ? 'entrada manual (saldo de abertura)' : kind === 'perda' ? 'perda/baixa manual' : 'sobra/ajuste'}${m.reason ? ': ' + m.reason : ''}`, refType: 'stock_adjustment', refId: stockMovementId, userId: m.user_id, lines });
 }
 
+// ---------------------------------------------------------------- devoluções e garantias
+/** Conta criada sob demanda (empresas anteriores à Fase 11 não a têm no plano padrão). */
+async function ensureWarrantyAccount(db: Db, companyId: string) {
+  if ((await db.query(`select 1 from ledger_accounts where company_id = $1 and system_key = 'desp_garantias'`, [companyId])).rowCount) return;
+  const code = (await db.query(`select 1 from ledger_accounts where company_id = $1 and code = '4.1.3.01'`, [companyId])).rowCount ? '4.1.3.99' : '4.1.3.01';
+  await db.query(`insert into ledger_accounts (company_id, code, name, type, dre_group, system_key, is_system) values ($1,$2,'Custo de garantias (trocas e perdas)','custo','cmv','desp_garantias',true) on conflict do nothing`, [companyId, code]);
+}
+
+/** Devolução de venda: dedução da receita, retorno ao estoque pelo custo da venda, estorno proporcional de imposto/comissão; abate títulos em aberto e o restante vira "a restituir". */
+export async function postSaleReturn(db: Db, returnId: string) {
+  const r = (await db.query(`select r.*, r.created_at::date::text as d from sale_returns r where r.id = $1`, [returnId])).rows[0]; if (!r) return;
+  const s = (await db.query('select * from sales where id = $1', [r.sale_id])).rows[0];
+  const items = (await db.query(`select i.*, p.brand_id, p.category_id from sale_return_items i join products p on p.id = i.product_id where i.return_id = $1 order by i.id`, [returnId])).rows;
+  const w = items.map((i) => Number(i.total)); const tax = allocate(Number(r.tax_total), w), comm = allocate(Number(r.commission_reversal), w); const lines: PostLine[] = [];
+  items.forEach((i, k) => {
+    const dims: Dims = { branch_id: r.branch_id, channel: s.channel, customer_id: s.customer_id, product_id: i.product_id, brand_id: i.brand_id, category_id: i.category_id, seller_id: s.seller_id };
+    const cost = r2(Number(i.qty) * Number(i.unit_cost));
+    lines.push({ key: 'devolucoes', debit: r2(Number(i.total)), dims }, { key: 'estoques', debit: cost, dims }, { key: 'cmv', credit: cost, dims },
+      { key: 'obrigacoes_trib', debit: tax[k], dims }, { key: 'impostos_vendas', credit: tax[k], dims }, { key: 'comissoes_pagar', debit: comm[k], dims }, { key: 'desp_comissoes', credit: comm[k], dims });
+  });
+  const cd: Dims = { branch_id: r.branch_id, channel: s.channel, customer_id: s.customer_id };
+  lines.push({ key: 'contas_receber', credit: Number(r.abated), dims: cd }, { key: 'clientes_restituir', credit: Number(r.refunded), dims: cd });
+  await post(db, r.company_id, { date: r.d, description: `Devolução de venda nº ${r.number} (venda ${s.number})`, refType: 'sale_return', refId: returnId, userId: r.created_by, lines });
+}
+
+/** Troca em garantia: a unidade defeituosa entra (avariada) e a nova sai; o resultado fica em "custo de garantias" até o fornecedor responder. */
+export async function postWarrantyExchange(db: Db, claimId: string, defectiveValue: number, replacementValue: number) {
+  const c = (await db.query(`select *, now()::date::text as d from warranty_claims where id = $1`, [claimId])).rows[0]; if (!c) return;
+  await ensureWarrantyAccount(db, c.company_id); const dims: Dims = { branch_id: c.branch_id, product_id: c.product_id, customer_id: c.customer_id };
+  await post(db, c.company_id, { date: c.d, description: `Troca em garantia nº ${c.number}`, refType: 'warranty_exchange', refId: claimId, userId: c.resolved_by,
+    lines: [{ key: 'estoques', debit: defectiveValue, dims }, { key: 'desp_garantias', credit: defectiveValue, dims }, { key: 'desp_garantias', debit: replacementValue, dims }, { key: 'estoques', credit: replacementValue, dims }] });
+}
+/** Resposta do fornecedor sobre a unidade defeituosa: crédito (abate o que devemos) ou recusa (a perda é reconhecida). */
+export async function postWarrantySupplier(db: Db, claimId: string, outcome: 'credito' | 'recusado', cost: number, credit: number) {
+  const c = (await db.query(`select *, now()::date::text as d from warranty_claims where id = $1`, [claimId])).rows[0]; if (!c) return;
+  await ensureWarrantyAccount(db, c.company_id); const dims: Dims = { branch_id: c.branch_id, product_id: c.product_id, supplier_id: c.supplier_id };
+  const diff = r2(credit - cost);
+  await post(db, c.company_id, { date: c.d, description: `Garantia nº ${c.number}: ${outcome === 'credito' ? 'crédito do fornecedor' : 'fornecedor recusou'}`, refType: 'warranty_supplier', refId: claimId, userId: c.resolved_by,
+    lines: outcome === 'credito' ? [{ key: 'fornecedores', debit: credit, dims }, { key: 'estoques', credit: cost, dims }, { key: 'desp_garantias', debit: diff < 0 ? -diff : 0, credit: diff > 0 ? diff : 0, dims }]
+      : [{ key: 'desp_garantias', debit: cost, dims }, { key: 'estoques', credit: cost, dims }] });
+}
+
 /**
  * Reconstrói/complementa o razão a partir das operações já existentes (idempotente: só lança o que ainda não tem lançamento).
  * Serve para a implantação sobre dados anteriores e como rede de segurança.
@@ -245,6 +287,7 @@ export async function syncLedger(db: Db, companyId: string) {
   for (const id of await ids('select id from account_movements where company_id = $1 order by created_at')) await postMovement(db, id);
   for (const id of await ids(`select id::text as id from stock_movements where company_id = $1 and type in ('ajuste','inventario','saida','entrada') order by id`)) await postStockAdjustment(db, id);
   for (const id of await ids(`select id from sales where company_id = $1 and status = 'cancelada' and confirmed_at is not null`)) await postSaleCancel(db, id);
+  for (const id of await ids('select id from sale_returns where company_id = $1 order by created_at')) await postSaleReturn(db, id);
   for (const id of await ids('select id from settlements where company_id = $1 and reversed_at is not null')) await postSettlementReversal(db, id);
   for (const id of await ids('select id from tax_obligations where company_id = $1 and payable_id is not null')) await postTaxTrueUp(db, id);
   counts.created = Number((await db.query('select count(*) n from journal_entries where company_id = $1', [companyId])).rows[0].n) - before;

@@ -23,6 +23,8 @@ import { biRoutes } from './routes/bi.js';
 import { intelligenceRoutes } from './routes/intelligence.js';
 import { marketplaceRoutes } from './routes/marketplace.js';
 import { shareRoutes } from './routes/share.js';
+import { returnsRoutes } from './routes/returns.js';
+import { closingRoutes } from './routes/closing.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000 });
@@ -47,11 +49,12 @@ export async function buildApp() {
     if (err instanceof ZodError) {
       return reply.code(422).send({ error: 'Dados inválidos.', issues: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) });
     }
+    if (err.message?.startsWith('PERIODO_FECHADO:')) return reply.code(409).send({ error: `O período contábil ${err.message.split(':')[1]} está fechado: não aceita novos lançamentos. Peça a um gestor para reabri-lo ou use uma data/competência de período aberto.`, code: 'period_closed' });
     if (err.code === '23505') return reply.code(409).send({ error: 'Já existe um registro com este valor único.', constraint: err.constraint });
     if (err.code === '23503') return reply.code(409).send({ error: 'Registro relacionado inexistente ou em uso.' });
     if (err.code === '22P02') return reply.code(400).send({ error: 'Identificador inválido.' });
     if (err.statusCode && err.statusCode < 500) return reply.code(err.statusCode).send({ error: err.message });
-    req.log.error(err);
+    req.log.error(err); if (process.env.DEBUG_ERR) console.error('ERR>', err.message);
     return reply.code(500).send({ error: 'Erro interno.' });
   });
 
@@ -73,5 +76,7 @@ export async function buildApp() {
   await app.register(intelligenceRoutes);
   await app.register(marketplaceRoutes);
   await app.register(shareRoutes);
+  await app.register(returnsRoutes);
+  await app.register(closingRoutes);
   return app;
 }

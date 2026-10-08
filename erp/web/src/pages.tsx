@@ -72,7 +72,7 @@ const prodFields: Field[] = [
   { key: 'weight_kg', label: 'Peso (kg)', type: 'number', step: '0.001', list: false }, { key: 'height_cm', label: 'Altura (cm)', type: 'number', list: false },
   { key: 'width_cm', label: 'Largura (cm)', type: 'number', list: false }, { key: 'length_cm', label: 'Comprimento (cm)', type: 'number', list: false },
   { key: 'min_stock', label: 'Estoque mínimo', type: 'number', list: false }, { key: 'max_stock', label: 'Estoque máximo', type: 'number', list: false },
-  { key: 'ideal_stock', label: 'Estoque ideal', type: 'number', list: false }, { key: 'location', label: 'Localização', list: false },
+  { key: 'ideal_stock', label: 'Estoque ideal', type: 'number', list: false }, { key: 'warranty_days', label: 'Garantia (dias)', type: 'number', list: false, hint: 'Vazio = prazo padrão da empresa (Garantias)' }, { key: 'location', label: 'Localização', list: false },
   { key: 'cost_current', label: 'Custo atual', type: 'number', step: '0.01', list: (r) => brl(r.cost_current) },
   { key: 'sale_price', label: 'Preço de venda', type: 'number', step: '0.01', list: (r) => brl(r.sale_price) },
   { key: 'min_price', label: 'Preço mínimo', type: 'number', step: '0.01', list: false },

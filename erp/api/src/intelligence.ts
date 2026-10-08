@@ -132,6 +132,22 @@ export const RULES: RuleDef[] = [
         if (margin < 0) out.push({ fingerprint: `mkt:prejuizo:${x.mid}:${x.pid}`, severity: 'critico', title: `${x.sku} dá prejuízo em ${x.name}: ${brl(margin)} por unidade`, detail: `Preço ${brl(price)} não cobre custo, comissão, taxas e frete.`, link: '/marketplace/anuncios', value: margin }); }
       return out;
     } },
+  { key: 'pos_venda', area: 'Pós-venda e contabilidade', label: 'Garantias paradas e fechamento do mês', description: 'Garantias sem decisão, unidades defeituosas aguardando o fornecedor e mês anterior ainda não fechado.',
+    params: { claim_days: { label: 'Garantia sem decisão há (dias)', default: 5, min: 1, max: 90 }, supplier_days: { label: 'Aguardando fornecedor há (dias)', default: 30, min: 1, max: 365 }, close_day: { label: 'Lembrar do fechamento a partir do dia', default: 10, min: 1, max: 28 } },
+    async run(db, c, p) {
+      const out: Candidate[] = [];
+      const w = (await db.query(`select count(*)::int as n from warranty_claims where company_id = $1 and status in ('aberta','em_analise') and created_at < now() - ($2::int * interval '1 day')`, [c, p.claim_days])).rows[0].n;
+      if (w > 0) out.push({ fingerprint: 'garantia:sem_decisao', severity: 'atencao', title: `${w} garantia(s) sem decisão há mais de ${p.claim_days} dia(s)`, link: '/garantias', value: w });
+      const s = (await db.query(`select count(*)::int as n, coalesce(sum(defective_pending * coalesce(defective_unit_cost,0)),0) as v from warranty_claims where company_id = $1 and defective_pending > 0 and resolved_at < now() - ($2::int * interval '1 day')`, [c, p.supplier_days])).rows[0];
+      if (s.n > 0) out.push({ fingerprint: 'garantia:fornecedor', severity: 'atencao', title: `${s.n} garantia(s) com unidade defeituosa parada há mais de ${p.supplier_days} dias (${brl(Number(s.v))} em estoque avariado)`, detail: 'Cobre o crédito do fornecedor ou registre a recusa para reconhecer a perda.', link: '/garantias', value: Number(s.v) });
+      const t = todayStr(); const prev = iso(new Date(Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 2, 1)));
+      if (Number(t.slice(8)) >= p.close_day) {
+        const has = (await db.query(`select 1 from journal_entries where company_id = $1 and competence = $2 limit 1`, [c, prev])).rowCount;
+        const closed = (await db.query(`select 1 from accounting_periods where company_id = $1 and period = $2 and status = 'fechado'`, [c, prev])).rowCount;
+        if (has && !closed) out.push({ fingerprint: `fechamento:${prev.slice(0, 7)}`, severity: 'info', title: `${prev.slice(5, 7)}/${prev.slice(0, 4)} ainda não foi fechado na contabilidade`, link: '/contabil/fechamento' });
+      }
+      return out;
+    } },
   { key: 'aprovacoes', area: 'Comercial', label: 'Aprovações de venda paradas', description: 'Pedidos aguardando aprovação do gestor.',
     params: { hours: { label: 'Parado há mais de (horas)', default: 24, min: 1, max: 720 } },
     async run(db, c, p) {
