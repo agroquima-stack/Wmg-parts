@@ -15,6 +15,7 @@ import { pricingRoutes } from './routes/pricing.js';
 import { salesRoutes } from './routes/sales.js';
 import { quoteRoutes } from './routes/quotes.js';
 import { b2bRoutes } from './routes/b2b.js';
+import { purchasingRoutes } from './routes/purchasing.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000 });
@@ -57,5 +58,6 @@ export async function buildApp() {
   await app.register(salesRoutes);
   await app.register(quoteRoutes);
   await app.register(b2bRoutes);
+  await app.register(purchasingRoutes);
   return app;
 }

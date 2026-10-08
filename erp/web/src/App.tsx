@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { api, get } from './api';
 import { AuthProvider, useAuth } from './auth';
+import { PriceCompare, PurchaseOrders, Quotations, Receivings, Suggestions, SupplierReturns } from './purchasing';
 import { Approvals, B2B, PDV, Pricing, PriceTables, PublicQuote, Quotes, Sales } from './commercial';
 import { Inventories, Movements, StockAnalysis, StockPage, Transfers } from './stock';
 import { ApplicationSearch, Audit, Brands, Categories, Customers, Dashboard, Products, Roles, Suppliers, Users, Vehicles } from './pages';
@@ -45,6 +46,8 @@ const NAV: { group: string; items: [string, string, string][] }[] = [
     ['/motos', 'Motos', 'vehicles:view'], ['/clientes', 'Clientes', 'customers:view'], ['/fornecedores', 'Fornecedores', 'suppliers:view']] },
   { group: 'Comercial', items: [['/pdv', 'PDV / Nova venda', 'sales:create'], ['/vendas', 'Vendas', 'sales:view'], ['/orcamentos', 'Orçamentos', 'quotes:view'], ['/aprovacoes', 'Aprovações', 'sales:approve'],
     ['/b2b', 'B2B', 'customers:view'], ['/precos', 'Tabelas de preço', 'pricing:view'], ['/precificacao', 'Precificação', 'pricing:view']] },
+  { group: 'Compras', items: [['/compras/sugestao', 'Sugestão de compra', 'purchases:view'], ['/compras/cotacoes', 'Cotações', 'purchases:view'], ['/compras/pedidos', 'Pedidos de compra', 'purchases:view'],
+    ['/compras/recebimento', 'Recebimento / XML', 'receiving:view'], ['/compras/precos', 'Comparar fornecedores', 'purchases:view'], ['/compras/devolucoes', 'Devolução a fornecedor', 'purchases:view']] },
   { group: 'Estoque', items: [['/estoque', 'Saldos', 'stock:view'], ['/estoque/movimentos', 'Movimentações', 'stock:view'], ['/estoque/transferencias', 'Transferências', 'stock:view'],
     ['/estoque/inventario', 'Inventário', 'stock:view'], ['/estoque/analises', 'Parados e curva ABC', 'stock:view']] },
   { group: 'Administração', items: [['/usuarios', 'Usuários', 'users:view'], ['/perfis', 'Perfis e permissões', 'roles:view'], ['/auditoria', 'Auditoria', 'audit:view']] },
@@ -70,6 +73,8 @@ function Shell() {
         <Route path="/motos" element={<Vehicles />} /><Route path="/clientes" element={<Customers />} /><Route path="/fornecedores" element={<Suppliers />} />
         <Route path="/pdv" element={<PDV />} /><Route path="/vendas" element={<Sales />} /><Route path="/orcamentos" element={<Quotes />} /><Route path="/aprovacoes" element={<Approvals />} />
         <Route path="/b2b" element={<B2B />} /><Route path="/precos" element={<PriceTables />} /><Route path="/precificacao" element={<Pricing />} />
+        <Route path="/compras/sugestao" element={<Suggestions />} /><Route path="/compras/cotacoes" element={<Quotations />} /><Route path="/compras/pedidos" element={<PurchaseOrders />} />
+        <Route path="/compras/recebimento" element={<Receivings />} /><Route path="/compras/precos" element={<PriceCompare />} /><Route path="/compras/devolucoes" element={<SupplierReturns />} />
         <Route path="/estoque" element={<StockPage />} /><Route path="/estoque/movimentos" element={<Movements />} /><Route path="/estoque/transferencias" element={<Transfers />} />
         <Route path="/estoque/inventario" element={<Inventories />} /><Route path="/estoque/analises" element={<StockAnalysis />} />
         <Route path="/usuarios" element={<Users />} /><Route path="/perfis" element={<Roles />} /><Route path="/auditoria" element={<Audit />} />

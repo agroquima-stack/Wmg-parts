@@ -136,6 +136,22 @@ export async function searchRoutes(app: FastifyInstance) {
       if (pending) alerts.unshift({ level: 'red', text: `${pending} venda(s) aguardando aprovação de desconto/margem.` });
       if (expiring) alerts.push({ level: 'yellow', text: `${expiring} orçamento(s) expiram nos próximos 2 dias.` });
     }
-    return { counts, alerts, stock, commercial };
+    let purchasing = null;
+    if (a.permissions.has('purchases:view')) {
+      const k = (await pool.query(`select
+        (select count(*)::int from purchase_orders where company_id = $1 and status = 'aguardando_aprovacao') as awaiting_approval,
+        (select count(*)::int from purchase_orders where company_id = $1 and status in ('aprovado','enviado','parcial') and expected_date < current_date) as late_orders,
+        (select count(*)::int from purchase_orders where company_id = $1 and status in ('aprovado','enviado','parcial')) as open_orders,
+        (select count(*)::int from receivings where company_id = $1 and status = 'em_conferencia') as receivings_open,
+        coalesce((select sum(amount) from payables where company_id = $1 and kind = 'titulo' and status = 'aberto' and due_date between current_date and current_date + 7),0)::numeric(14,2) as payables_7d,
+        coalesce((select sum(amount) from payables where company_id = $1 and kind = 'titulo' and status = 'aberto' and due_date < current_date),0)::numeric(14,2) as payables_overdue`, [c])).rows[0];
+      purchasing = k;
+      if (k.awaiting_approval) alerts.unshift({ level: 'yellow', text: `${k.awaiting_approval} pedido(s) de compra aguardando aprovação.` });
+      if (k.late_orders) alerts.push({ level: 'red', text: `${k.late_orders} pedido(s) de compra com entrega atrasada.` });
+      if (k.receivings_open) alerts.push({ level: 'yellow', text: `${k.receivings_open} recebimento(s) aguardando conferência.` });
+      if (Number(k.payables_overdue) > 0) alerts.unshift({ level: 'red', text: `R$ ${Number(k.payables_overdue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em contas a pagar vencidas.` });
+      if (Number(k.payables_7d) > 0) alerts.push({ level: 'yellow', text: `R$ ${Number(k.payables_7d).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em contas a pagar vencem nos próximos 7 dias.` });
+    }
+    return { counts, alerts, stock, commercial, purchasing };
   });
 }

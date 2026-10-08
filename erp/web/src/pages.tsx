@@ -4,6 +4,7 @@ import { api, ApiError, brl, get, pct, qs } from './api';
 import { useAuth } from './auth';
 import { DataPage, Modal, type Field } from './DataPage';
 import { CustomerPanel } from './commercial';
+import { SupplierProducts } from './purchasing';
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map((u) => ({ value: u, label: u }));
 const active: Field = { key: 'active', label: 'Ativo', type: 'checkbox', list: true };
@@ -21,7 +22,7 @@ export function Dashboard() {
   if (!d) return <p className="muted">Carregando…</p>;
   const k = (l: string, v: ReactNode, to?: string) => <div className="card kpi">{to ? <Link to={to}><div className="v">{v}</div></Link> : <div className="v">{v}</div>}<div className="l">{l}</div></div>;
   return <>
-    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Compras e financeiro entram nas próximas fases.</p>
+    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Financeiro entra nas próximas fases.</p>
     <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Produtos ativos', d.counts.products_active, '/produtos')}{k('Clientes ativos', d.counts.customers_active, '/clientes')}
       {k('Fornecedores', d.counts.suppliers_active, '/fornecedores')}{k('Marcas', d.counts.brands, '/marcas')}{k('Modelos de moto', d.counts.vehicle_models, '/motos')}
@@ -33,6 +34,9 @@ export function Dashboard() {
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', marginBottom: 18 }}>
         <div className="card"><b>Vendas por vendedor (mês)</b><table><tbody>{d.commercial.by_seller.map((s: any) => <tr key={s.name}><td>{s.name}</td><td className="num">{brl(s.revenue)}</td><td className="num muted">margem {brl(s.margin)}</td></tr>)}{!d.commercial.by_seller.length && <tr><td className="muted">Sem vendas no mês.</td></tr>}</tbody></table></div>
         <div className="card"><b>Vendas por canal (mês)</b><table><tbody>{d.commercial.by_channel.map((s: any) => <tr key={s.channel}><td>{s.channel}</td><td className="num">{brl(s.revenue)}</td><td className="num muted">{s.sales} vendas</td></tr>)}{!d.commercial.by_channel.length && <tr><td className="muted">Sem vendas no mês.</td></tr>}</tbody></table></div></div></>}
+    {d.purchasing && <div className="grid kpis" style={{ marginBottom: 18 }}>
+      {k('Pedidos de compra abertos', d.purchasing.open_orders, '/compras/pedidos')}{k('Entregas atrasadas', d.purchasing.late_orders, '/compras/pedidos')}
+      {k('Recebimentos em conferência', d.purchasing.receivings_open, '/compras/recebimento')}{k('A pagar em 7 dias', brl(d.purchasing.payables_7d))}{k('A pagar vencido', brl(d.purchasing.payables_overdue))}</div>}
     {d.stock && <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Valor em estoque (custo médio)', brl(d.stock.total_value), '/estoque')}{k('Abaixo do mínimo', d.stock.below_min, '/estoque')}
       {k('Sem estoque', d.stock.out_of_stock, '/estoque')}{k('Acima do máximo', d.stock.excess, '/estoque')}
@@ -136,7 +140,7 @@ export const Vehicles = () => <DataPage title="Motos" subtitle="Marca, modelo e 
   { key: 'make', label: 'Marca', required: true, list: true }, { key: 'model', label: 'Modelo', required: true, list: true }, { key: 'version', label: 'Versão', list: true },
   { key: 'year_from', label: 'Ano inicial', type: 'number', required: true, list: true }, { key: 'year_to', label: 'Ano final', type: 'number', list: true, hint: 'Vazio = ainda em produção' },
   { key: 'displacement_cc', label: 'Cilindrada (cc)', type: 'number', list: true }, { key: 'engine', label: 'Motor', list: false }, { key: 'category', label: 'Categoria', list: false }, active]} />;
-export const Suppliers = () => <DataPage title="Fornecedores" path="/suppliers" perm="suppliers" fields={[
+export const Suppliers = () => <DataPage title="Fornecedores" path="/suppliers" perm="suppliers" extras={(row) => <SupplierProducts id={row.id} />} fields={[
   { key: 'legal_name', label: 'Razão social', required: true, list: true }, { key: 'trade_name', label: 'Nome fantasia', list: true }, { key: 'cnpj', label: 'CNPJ', list: true },
   { key: 'ie', label: 'IE', list: false }, { key: 'contact_name', label: 'Contato', list: false }, { key: 'phone', label: 'Telefone', list: false }, { key: 'email', label: 'E-mail', type: 'email', list: false },
   ...address, { key: 'payment_terms_days', label: 'Prazo pgto (dias)', type: 'number', list: false }, { key: 'lead_time_days', label: 'Prazo entrega (dias)', type: 'number', list: false },

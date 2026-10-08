@@ -12,7 +12,7 @@ import { searchApplications } from './search.js';
 export const itemSchema = z.object({ product_id: z.string().uuid(), qty: z.coerce.number().positive().max(1e6), discount_pct: z.coerce.number().min(0).lt(100).optional() });
 const paymentSchema = z.object({ method: z.enum(METHODS), amount: z.coerce.number().positive(), installments: z.coerce.number().int().min(1).max(24).optional() });
 
-async function branchOf(db: Db, a: Auth, id?: string | null) {
+export async function branchOf(db: Db, a: Auth, id?: string | null) {
   const b = id || a.branchId;
   if (!b) throw new HttpError(422, 'Selecione uma filial.');
   const ok = await db.query(

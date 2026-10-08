@@ -252,7 +252,7 @@ export function Pricing() {
       {rows.items.map((r: any) => { const low = r.current_margin_pct != null && r.current_margin_pct < Number(r.min_margin_pct); return <tr key={r.id}><td><input type="checkbox" style={{ width: 'auto' }} checked={sel.includes(r.id)} onChange={(e) => setSel(e.target.checked ? [...sel, r.id] : sel.filter((x) => x !== r.id))} /></td><td>{r.sku} {r.description}</td><td className="num">{brl(r.cost_basis)}</td><td className="num">{brl(r.acquisition_cost)}</td><td className="num">{brl(r.sale_price)}</td>
         <td className="num"><span className={`pill ${low ? 'red' : 'green'}`}>{pct(r.current_margin_pct)}</span></td><td className="num">{pct(r.target_margin_pct)}</td><td className="num"><b>{r.suggested_price != null ? brl(r.suggested_price) : '—'}</b></td><td className="num">{r.computed_min_price != null ? brl(r.computed_min_price) : '—'}</td></tr>; })}</tbody></table></>;
 }
-function ProductPick({ value, onChange }: { value: any; onChange: (p: any) => void }) {
+export function ProductPick({ value, onChange }: { value: any; onChange: (p: any) => void }) {
   const [q, setQ] = useState(''); const [res, setRes] = useState<any[]>([]);
   useEffect(() => { if (q.length < 2) return setRes([]); const t = setTimeout(() => get('/products' + qs({ q, pageSize: 6 })).then((r) => setRes(r.items)), 250); return () => clearTimeout(t); }, [q]);
   if (value) return <span><b>{value.sku}</b> {value.description} <button onClick={() => onChange(null)}>×</button></span>;

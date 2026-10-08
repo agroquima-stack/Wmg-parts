@@ -1,7 +1,7 @@
 # WMG ERP — Arquitetura (primeira entrega)
 
 > Escopo: ERP + gestão + BI + pricing + IA para distribuidora de motopeças, multiempresa/multifilial.
-> Estado: **Fases 1 (Core), 2 (Estoque) e 3 (Comercial) implementadas**. As demais fases estão especificadas aqui e entram em migrações incrementais.
+> Estado: **Fases 1 (Core), 2 (Estoque), 3 (Comercial) e 4 (Compras) implementadas**. As demais fases estão especificadas aqui e entram em migrações incrementais.
 
 ## 1. Arquitetura geral
 
@@ -90,7 +90,7 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 | 2 Estoque | saldos por filial/status, movimentações imutáveis, transferência, inventário, mínimo/máx, curva ABC, parados, custo médio global | **feito** |
 | 3 Comercial | tabelas de preço, motor de pricing, descontos/alçadas, orçamento→pedido, venda, PDV, B2B | **feito** |
 | 4 Compras … | (próxima: Compras) | |
-| 4 Compras | sugestão de compra, cotação, pedido, recebimento, XML, custo médio | |
+| 4 Compras | sugestão de compra, cotação, pedido, recebimento, XML, custo médio | **feito** |
 | 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | |
 | 6 Fiscal | NF-e/NFC-e via provedor, parametrização tributária (validada por contador), guias | |
 | 7 Controladoria | plano de contas, centros de custo, DRE, balanço | |
@@ -122,6 +122,7 @@ A fazer: RLS do Postgres como segunda barreira, 2FA, criptografia de campos sens
 Stateless API (escala horizontal atrás de balanceador); sessão no banco (migrável p/ Redis); paginação obrigatória (máx. 200); índices por `company_id` + chaves de busca; `stock_movements`/`audit_log` append-only e particionáveis por mês; saldos materializados em `stock_balances` (leitura O(1)); BI/relatórios pesados em réplica de leitura/visões materializadas; workers separados via outbox para integrações; multiempresa por coluna hoje, com caminho para schema/banco dedicado por cliente grande.
 
 ## Decisões do negócio (confirmadas)
+- **Compras (confirmado):** sem aprovação de compra por padrão — `emitir` já aprova; há um limite de aprovação configurável (`purchasing.approval_threshold`) para quando o negócio quiser. Fornecedores emitem **nota normal do Simples, sem ST**.
 - **Regime tributário: Simples Nacional.** A Fase 6 usa CSOSN (não CST de ICMS), sem destaque de crédito de ICMS na saída, apuração via DAS; ICMS-ST/DIFAL tratados por regra de produto/UF. Parametrização a validar com o contador.
 - **Custo médio: global** (um custo médio por produto, somando todas as filiais). Implementado: toda entrada com custo recalcula `cost_avg` ponderado pelo saldo próprio total (disponível+reservado+avariado+quarentena); transferência não altera custo.
 - **Alçada de desconto:** todo desconto acima do limite do usuário (`users.max_discount_pct`) exige aprovação do gestor (permissão `sales:approve`), registrada em `discount_approvals` com solicitante, aprovador, percentual, margem antes/depois e auditoria. Vendas abaixo da margem mínima seguem a mesma trava. Entra na Fase 3.
@@ -143,6 +144,17 @@ Stateless API (escala horizontal atrás de balanceador); sessão no banco (migr�
 - **B2B**: carteira com limite/utilizado/disponível/vencido, painel do cliente (faturamento, ticket, frequência, margem, mais comprados, inadimplência), repetir pedido em 1 clique e pedidos recorrentes (geração disparada pelo gestor; sem agendador automático ainda).
 - Vendedores enxergam só as próprias vendas e orçamentos; gestores veem tudo. Dashboard comercial real: faturamento dia/mês, meta, ticket, margem, por vendedor e por canal.
 - Limitações conscientes: documento fiscal só na Fase 6 (imposto da venda é **estimativa** pela alíquota informada); contas a receber são a base da Fase 5 (baixa/juros/multa/conciliação ainda não existem); comissão é calculada e gravada, mas ainda não há fechamento/pagamento de comissões.
+
+## Fase 4 — Compras (como funciona)
+- **Sugestão de compra**: para cada produto calcula posição (disponível + pedidos pendentes + em trânsito) contra o ponto de pedido = máx(mínimo, demanda no prazo + segurança por curva ABC: A 30%, B 15%, C 5%); demanda = venda média dos últimos 90 dias × fator de sazonalidade (mesmo período do ano anterior, só quando há 12+ meses de histórico — senão 1,0 e o motivo é exibido) × (prazo do fornecedor + dias de revisão). Repõe até o estoque ideal, limitado ao máximo. Fornecedor = o preferencial, ou o de menor último preço. Cada item mostra **nível de confiança** (baixa/média/alta pelo histórico) e a base do cálculo — nunca é apresentado como certeza.
+- **Cotação**: itens × ofertas de fornecedores (preço, prazo de entrega, prazo de pagamento); melhor preço por item (empate pelo menor prazo); a adjudicação fecha a cotação e gera **um pedido por fornecedor vencedor**. Toda oferta entra no histórico de preços.
+- **Pedido de compra**: rascunho → aprovado → enviado → parcial → recebido (ou cancelado). Com limite de aprovação configurado, pedidos acima dele aguardam quem tem `purchases:approve` (outra pessoa, nunca o criador).
+- **Recebimento**: importa XML de NF-e (casa fornecedor pelo CNPJ; produto por código do fornecedor já aprendido → EAN → código do fabricante; itens sem casamento são vinculados na conferência e o sistema aprende) ou lançamento manual. Conferência física item a item; entrada parcial; divergência de quantidade (NF × físico × pedido) e de preço (NF × pedido, tolerância 0,5%) bloqueiam a conclusão até serem aceitas — **divergência de preço só por quem aprova compras**. NF duplicada (chave ou nº/série do fornecedor) é recusada. Leitor de XML recusa DTD/entidades.
+- **Custo de entrada (Simples, nota normal, sem ST)**: sem crédito de ICMS/PIS/COFINS, o custo é valor do item + IPI do item + rateio proporcional de frete/seguro/outras despesas − rateio do desconto. Atualiza o custo médio **global** (ponderado) e o último custo; registra preço no histórico do fornecedor; gera contas a pagar (duplicatas do XML ou prazo do pedido/fornecedor). Pagar a NF integral mesmo com entrega parcial é intencional: a diferença deve ser tratada por devolução/crédito.
+- **Devolução ao fornecedor**: baixa o estoque disponível (movimento `devolucao_fornecedor`) e gera **crédito** a abater no contas a pagar (a baixa/compensação é da Fase 5).
+- **Comparação de fornecedores**: último preço, variação sobre o preço anterior, média/menor/maior, prazos e histórico — base para o alerta "fornecedor aumentando preço" (Fase 9).
+- Permissões: `purchases:*` (pedidos, cotações, devoluções) e `receiving:*` (recebimento): o estoquista confere e dá entrada, mas não emite pedidos.
+- Limitações: contas a pagar são só o registro (pagamento, juros, categoria e centro de custo na Fase 5); não há envio automático de pedido ao fornecedor por e-mail/portal (marcar "enviado" é manual); manifestação do destinatário/SEFAZ não é feita (importa apenas o XML recebido); XML de NF com ST ou de outro regime será lido, mas o custo não trata ICMS-ST (fora do escopo confirmado).
 
 ## Perguntas em aberto
 - Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.
