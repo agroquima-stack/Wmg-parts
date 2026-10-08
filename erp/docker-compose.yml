@@ -1,0 +1,29 @@
+# GTX MOTO PARTS ERP — uso local. Sobe o banco (PostgreSQL) e o sistema em http://localhost:8080
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erp
+      POSTGRES_DB: wmg_erp
+    volumes:
+      - gtx_dados:/var/lib/postgresql/data      # seus dados ficam guardados neste volume, mesmo desligando
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U erp -d wmg_erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://erp:erp@db:5432/wmg_erp
+      PUBLIC_URL: http://localhost:8080
+      CORS_ORIGIN: http://localhost:8080
+    ports:
+      - "8080:8080"
+volumes:
+  gtx_dados:

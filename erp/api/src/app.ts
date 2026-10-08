@@ -1,5 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { createReadStream, existsSync, statSync } from 'node:fs';
+import { extname, join, resolve, sep } from 'node:path';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { ZodError } from 'zod';
@@ -26,9 +28,17 @@ import { shareRoutes } from './routes/share.js';
 import { returnsRoutes } from './routes/returns.js';
 import { closingRoutes } from './routes/closing.js';
 
+const MIME: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.json': 'application/json', '.woff2': 'font/woff2', '.map': 'application/json' };
+
 export async function buildApp() {
+  // Modo "tudo em um" (uso local/Docker): com WEB_DIST apontando para o build do site, a mesma porta serve o site e a API (em /api).
+  const webDist = process.env.WEB_DIST && existsSync(join(process.env.WEB_DIST, 'index.html')) ? resolve(process.env.WEB_DIST) : null;
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000,
-    rewriteUrl: (req) => (req.url ?? '/').replace(/^\/api(?=\/|\?|$)/, '') || '/' });   // Firebase Hosting encaminha /api/** sem remover o prefixo
+    rewriteUrl: (req) => {   // Firebase Hosting também encaminha /api/** sem remover o prefixo
+      const u = req.url ?? '/';
+      if (/^\/api(?=\/|\?|$)/.test(u)) return u.replace(/^\/api/, '') || '/';
+      return webDist && !/^\/health(\?|$)/.test(u) ? '/__web' + u : u;
+    } });
   await app.register(helmet);
   await app.register(cors, { origin: config.corsOrigin, methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'] });
   await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
@@ -44,6 +54,14 @@ export async function buildApp() {
   });
 
   app.get('/health', async () => ({ ok: true }));
+  if (webDist) app.get('/__web/*', { config: { public: true, rateLimit: false } }, async (req, reply) => {
+    const rel = decodeURIComponent(String((req.params as Record<string, string>)['*'] ?? ''));
+    const file = resolve(webDist, '.' + sep + rel); const ok = file.startsWith(webDist + sep) && existsSync(file) && statSync(file).isFile();
+    const target = ok ? file : join(webDist, 'index.html');          // rotas do app (ex.: /vendas) caem no index.html
+    reply.header('content-type', MIME[extname(target)] ?? 'application/octet-stream')
+      .header('cache-control', ok && rel.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache');
+    return reply.send(createReadStream(target));
+  });
 
   app.setErrorHandler((err: Error & { statusCode?: number; code?: string; constraint?: string }, req, reply) => {
     if (err instanceof HttpError) return reply.code(err.status).send({ error: err.message, code: err.code, ...err.extra });
