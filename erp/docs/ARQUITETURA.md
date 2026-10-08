@@ -94,7 +94,8 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 | 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | **feito** |
 | 6 Fiscal | NF-e/NFC-e via provedor, parametrização tributária (validada por contador), guias | |
 | 7 Controladoria | plano de contas, centros de custo, DRE, balanço | **feito** |
-| 8 BI · 9 IA · 10 Ecossistema | dashboards, alertas, "Pergunte à Empresa", previsão, WhatsApp, marketplaces | |
+| 8 BI | painéis comercial/estoque/compras/financeiro, visão do dono, metas | **feito** |
+| 9 IA · 10 Ecossistema | alertas, "Pergunte à Empresa", previsão, WhatsApp, marketplaces | |
 
 ## 8. Wireframes (desktop)
 
@@ -191,6 +192,14 @@ Stateless API (escala horizontal atrás de balanceador); sessão no banco (migr�
 - **Verificações de consistência**: razão × saldo de cada conta bancária, × contas a receber, × fornecedores (NF e créditos), × estoque físico valorizado (tolerância: razão usa custo de cada movimento; físico usa custo médio atual), débitos = créditos, **Ativo = Passivo + PL**, vendas sem lançamento. **Sincronizar razão** lança o que ainda não tem lançamento (útil sobre dados anteriores à Fase 7).
 - **Registrar o saldo inicial de R$ 22.600,07 em produção**: `ADMIN_EMAIL=… ADMIN_PASSWORD=… COMPANY_NAME=… OPENING_BALANCE=22600.07 npm run bootstrap` cria a conta BTG Pactual com esse saldo (ou cadastre a conta em Financeiro → Bancos e caixa). Outros saldos de abertura: Controladoria → Lançamentos → Abertura do balanço.
 - Limitações: sem fechamento/bloqueio de períodos nem encerramento do exercício (o resultado do período aparece como "resultado apurado" no PL; a transferência para lucros acumulados é manual do contador); provisão do DAS usa a alíquota efetiva dos parâmetros (true-up só ao gerar o título do DAS); comissão e imposto de venda cancelada após fechamento de comissão/DAS dependem de ajuste manual; rateio de imposto/comissão por item é proporcional; estoque no razão pode divergir do físico pelo custo médio; sem depreciação, provisões, IRPJ/CSLL (Simples), conciliação de cartão por operadora, nem SPED/ECD/ECF.
+
+## Fase 8 — BI (como funciona)
+- **Metas** (`goals`, tela BI → Metas): estrutura pronta e editável; tipos faturamento, margem bruta mínima, ticket médio, giro, cobertura máxima e inadimplência máxima; escopo empresa/vendedor/categoria; meta de um mês específico substitui a "todos os meses". Sem meta definida, os painéis mostram o resultado sem comparar. Os valores do ambiente de demonstração são exemplos (seed DEMO); em produção nenhum valor é inventado.
+- **Visão do dono** (`/bi`): 14 perguntas de gestão respondidas com número, origem e link de detalhe; janela móvel de 30 dias contra os 30 anteriores.
+- **Comercial**: KPIs com variação, linha diária com comparação, meta com projeção do mês, rankings (vendedor/cliente/produto/categoria/marca/canal/filial), clientes que reduziram compras (queda ≥ 30% com base mínima R$ 500, configuráveis), vazamentos de margem e maiores descontos.
+- **Estoque**: valor, giro (CMV 90d anualizado ÷ estoque), cobertura, ABC, rupturas, excesso e parados. **Compras**: fornecedores (prazo/pontualidade), variação de preço, economia, pedidos abertos. **Financeiro**: caixa, aging, inadimplência, PMR/PMP, fluxo 30/60/90 (estimativa com confiança), resultado 6 meses.
+- Gráficos em SVG próprio com tooltip, legenda e alternância para tabela.
+- Limitações: giro/previsões dependem do histórico disponível; DAS é estimativa; sem exportação agendada de relatórios.
 
 ## Perguntas em aberto
 - Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.

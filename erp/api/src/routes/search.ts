@@ -4,6 +4,7 @@ import { can, requireAuth } from '../auth.js';
 import { idleAnalysis, stockSummary } from './stock.js';
 import { cashflow } from '../finance.js';
 import { dre } from '../accounting.js';
+import { goalFor } from '../bi.js';
 
 export async function searchApplications(companyId: string, raw: string) {
   const tokens = raw.split(/\s+/).filter(Boolean).slice(0, 8);
@@ -129,7 +130,7 @@ export async function searchRoutes(app: FastifyInstance) {
         group by u.name order by revenue desc`, [c])).rows;
       const byChannel = (await pool.query(`select channel, sum(total)::numeric(14,2) as revenue, count(*)::int as sales from sales where company_id = $1 and status = 'concluida'
         and date_trunc('month', confirmed_at) = date_trunc('month', now())${own} group by channel order by revenue desc`, [c])).rows;
-      const goal = Number((await pool.query(`select value->>'monthly' as m from company_settings where company_id = $1 and key = 'goal'`, [c])).rows[0]?.m ?? 0);
+      const goal = await goalFor(pool, c, 'faturamento', 'company', null, new Date().toISOString().slice(0, 7) + '-01') ?? 0;
       const pending = a.permissions.has('sales:approve') ? (await pool.query(`select count(*)::int n from sale_approvals where company_id = $1 and status = 'pendente'`, [c])).rows[0].n : 0;
       const expiring = (await pool.query(`select count(*)::int n from quotes where company_id = $1 and status in ('enviado','visualizado') and valid_until between current_date and current_date + 2${own.replace('seller_id', 'seller_id')}`, [c])).rows[0].n;
       commercial = { ...k, avg_ticket: k.sales_month ? Math.round(Number(k.revenue_month) / k.sales_month * 100) / 100 : 0,

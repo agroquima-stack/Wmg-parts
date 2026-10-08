@@ -8,10 +8,10 @@
     "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "migrate": "tsx src/scripts/migrate.ts",
-    "seed:demo": "tsx src/scripts/seed-demo.ts && tsx src/scripts/seed-demo-stock.ts && tsx src/scripts/seed-demo-sales.ts && tsx src/scripts/seed-demo-purchasing.ts && tsx src/scripts/seed-demo-finance.ts && tsx src/scripts/seed-demo-fiscal.ts && tsx src/scripts/seed-demo-accounting.ts",
+    "seed:demo": "tsx src/scripts/seed-demo.ts && tsx src/scripts/seed-demo-stock.ts && tsx src/scripts/seed-demo-sales.ts && tsx src/scripts/seed-demo-purchasing.ts && tsx src/scripts/seed-demo-finance.ts && tsx src/scripts/seed-demo-fiscal.ts && tsx src/scripts/seed-demo-accounting.ts && tsx src/scripts/seed-demo-bi.ts",
     "bootstrap": "tsx src/scripts/bootstrap.ts",
-    "accounting:sync": "tsx src/scripts/seed-demo-accounting.ts",
-    "test": "tsx --test src/app.test.ts src/stock.test.ts src/commercial.test.ts src/purchasing.test.ts src/finance.test.ts src/fiscal.test.ts src/accounting.test.ts src/lib/documents.test.ts"
+    "accounting:sync": "tsx src/scripts/seed-demo-accounting.ts && tsx src/scripts/seed-demo-bi.ts",
+    "test": "tsx --test src/app.test.ts src/stock.test.ts src/commercial.test.ts src/purchasing.test.ts src/finance.test.ts src/fiscal.test.ts src/accounting.test.ts src/bi.test.ts src/lib/documents.test.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.1",

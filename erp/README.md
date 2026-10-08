@@ -16,7 +16,7 @@ Produção: `ADMIN_EMAIL=… ADMIN_PASSWORD=… COMPANY_NAME=… npm run bootstr
 Testes: `cd api && npm test` (integração, exige Postgres com a demo).
 
 ## Estado
-Fase 7 (Controladoria) pronta: razão de partidas dobradas imutável e balanceado, lançamentos automáticos de todas as operações, plano de contas configurável, DRE por competência (por filial, canal, categoria, marca, cliente e mês), balanço patrimonial, balancete, razão, centros de custo e verificações de consistência. Saldo inicial: `OPENING_BALANCE=22600.07` no bootstrap.
+Fase 8 (BI) pronta: visão do dono (14 perguntas com origem), painéis comercial/estoque/compras/financeiro e metas editáveis em BI → Metas (estrutura pronta; ajuste os valores quando quiser). Fase 7 (Controladoria) pronta: razão de partidas dobradas imutável e balanceado, lançamentos automáticos de todas as operações, plano de contas configurável, DRE por competência (por filial, canal, categoria, marca, cliente e mês), balanço patrimonial, balancete, razão, centros de custo e verificações de consistência. Saldo inicial: `OPENING_BALANCE=22600.07` no bootstrap.
 
 Fase 6 (Fiscal) pronta: documento fiscal (NF-e/NFC-e) com regras do Simples Nacional, validação, provedor intercambiável (manual e simulado), registro de nota emitida, cancelamento, CC-e, devolução, repositório de XMLs e painel do DAS (estimativa). Emissão com valor fiscal exige contratar um provedor.
 

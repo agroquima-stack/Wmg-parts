@@ -19,6 +19,7 @@ import { purchasingRoutes } from './routes/purchasing.js';
 import { financeRoutes } from './routes/finance.js';
 import { fiscalRoutes } from './routes/fiscal.js';
 import { accountingRoutes } from './routes/accounting.js';
+import { biRoutes } from './routes/bi.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' && { level: 'info' }, trustProxy: true, bodyLimit: 1_000_000 });
@@ -65,5 +66,6 @@ export async function buildApp() {
   await app.register(financeRoutes);
   await app.register(fiscalRoutes);
   await app.register(accountingRoutes);
+  await app.register(biRoutes);
   return app;
 }

@@ -91,6 +91,8 @@ export async function pricingRoutes(app: FastifyInstance) {
       }
       if (body.monthly_goal != null) {
         await db.query(`insert into company_settings (company_id, key, value) values ($1,'goal',$2) on conflict (company_id, key) do update set value = $2, updated_at = now()`, [a.companyId, JSON.stringify({ monthly: body.monthly_goal })]);
+        await db.query(`delete from goals where company_id = $1 and kind = 'faturamento' and scope_type = 'company' and month is null`, [a.companyId]);
+        if (body.monthly_goal > 0) await db.query(`insert into goals (company_id, kind, scope_type, target, updated_by) values ($1,'faturamento','company',$2,$3)`, [a.companyId, body.monthly_goal, a.userId]);
         await audit(db, a, 'settings', 'goal', 'update', null, { monthly: body.monthly_goal });
       }
       return { ok: true };

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { api, get } from './api';
 import { AuthProvider, useAuth } from './auth';
+import { BiCommercial, BiExecutive, BiFinance, BiPurchasing, BiStock, Goals } from './bi';
 import { BalanceSheet, Chart, Checks, Dre, Entries, TrialBalance } from './accounting';
 import { FiscalSettings, Invoices, PendingSales, Taxes, Xmls } from './fiscal';
 import { Banks, CashFlow, Commissions, FinanceSettings, Payables, Receivables, Reconciliation } from './finance';
@@ -55,6 +56,7 @@ const NAV: { group: string; items: [string, string, string][] }[] = [
     ['/financeiro/fluxo', 'Fluxo de caixa', 'finance:view'], ['/financeiro/comissoes', 'Comissões', 'finance:view'], ['/financeiro/config', 'Configurações', 'finance:view']] },
   { group: 'Fiscal', items: [['/fiscal/notas', 'Notas fiscais', 'fiscal:view'], ['/fiscal/pendentes', 'Vendas sem nota', 'fiscal:view'], ['/fiscal/impostos', 'Impostos (DAS)', 'fiscal:view'], ['/fiscal/xmls', 'XMLs', 'fiscal:view'], ['/fiscal/config', 'Configurações fiscais', 'fiscal:view']] },
   { group: 'Controladoria', items: [['/contabil/dre', 'DRE', 'accounting:view'], ['/contabil/balanco', 'Balanço patrimonial', 'accounting:view'], ['/contabil/balancete', 'Balancete e centros de custo', 'accounting:view'], ['/contabil/lancamentos', 'Lançamentos', 'accounting:view'], ['/contabil/plano', 'Plano de contas', 'accounting:view'], ['/contabil/verificacoes', 'Verificações', 'accounting:view']] },
+  { group: 'BI', items: [['/bi', 'Visão do dono', 'bi:view'], ['/bi/comercial', 'BI Comercial', 'bi:view'], ['/bi/estoque', 'BI Estoque', 'bi:view'], ['/bi/compras', 'BI Compras', 'bi:view'], ['/bi/financeiro', 'BI Financeiro', 'bi:view'], ['/bi/metas', 'Metas', 'bi:view']] },
   { group: 'Estoque', items: [['/estoque', 'Saldos', 'stock:view'], ['/estoque/movimentos', 'Movimentações', 'stock:view'], ['/estoque/transferencias', 'Transferências', 'stock:view'],
     ['/estoque/inventario', 'Inventário', 'stock:view'], ['/estoque/analises', 'Parados e curva ABC', 'stock:view']] },
   { group: 'Administração', items: [['/filiais', 'Filiais e dados fiscais', 'branches:view'], ['/usuarios', 'Usuários', 'users:view'], ['/perfis', 'Perfis e permissões', 'roles:view'], ['/auditoria', 'Auditoria', 'audit:view']] },
@@ -67,7 +69,7 @@ function Shell() {
   return <div className="layout">
     <aside className="side"><div className="brand">WMG ERP</div>
       {NAV.map((g) => { const items = g.items.filter(([, , p]) => !p || can(p)); return items.length ? <div key={g.group}><h4>{g.group}</h4>
-        {items.map(([to, l]) => <NavLink key={to} to={to} end={to === '/' || to === '/estoque'} className={({ isActive }) => (isActive ? 'active' : '')}>{l}</NavLink>)}</div> : null; })}
+        {items.map(([to, l]) => <NavLink key={to} to={to} end={to === '/' || to === '/estoque' || to === '/bi'} className={({ isActive }) => (isActive ? 'active' : '')}>{l}</NavLink>)}</div> : null; })}
       <h4>Conta</h4><NavLink to="/senha">Alterar senha</NavLink><a href="#" onClick={(e) => { e.preventDefault(); logout(); }}>Sair</a></aside>
     <div className="main">
       {me.company.is_demo && <div className="banner">AMBIENTE DE DEMONSTRAÇÃO — todos os dados são fictícios.</div>}
@@ -86,6 +88,7 @@ function Shell() {
         <Route path="/financeiro/fluxo" element={<CashFlow />} /><Route path="/financeiro/comissoes" element={<Commissions />} /><Route path="/financeiro/config" element={<FinanceSettings />} />
         <Route path="/fiscal/notas" element={<Invoices />} /><Route path="/fiscal/pendentes" element={<PendingSales />} /><Route path="/fiscal/impostos" element={<Taxes />} /><Route path="/fiscal/xmls" element={<Xmls />} /><Route path="/fiscal/config" element={<FiscalSettings />} />
         <Route path="/contabil/dre" element={<Dre />} /><Route path="/contabil/balanco" element={<BalanceSheet />} /><Route path="/contabil/balancete" element={<TrialBalance />} /><Route path="/contabil/lancamentos" element={<Entries />} /><Route path="/contabil/plano" element={<Chart />} /><Route path="/contabil/verificacoes" element={<Checks />} />
+        <Route path="/bi" element={<BiExecutive />} /><Route path="/bi/comercial" element={<BiCommercial />} /><Route path="/bi/estoque" element={<BiStock />} /><Route path="/bi/compras" element={<BiPurchasing />} /><Route path="/bi/financeiro" element={<BiFinance />} /><Route path="/bi/metas" element={<Goals />} />
         <Route path="/estoque" element={<StockPage />} /><Route path="/estoque/movimentos" element={<Movements />} /><Route path="/estoque/transferencias" element={<Transfers />} />
         <Route path="/estoque/inventario" element={<Inventories />} /><Route path="/estoque/analises" element={<StockAnalysis />} />
         <Route path="/filiais" element={<Branches />} /><Route path="/usuarios" element={<Users />} /><Route path="/perfis" element={<Roles />} /><Route path="/auditoria" element={<Audit />} />

@@ -22,7 +22,7 @@ export function Dashboard() {
   if (!d) return <p className="muted">Carregando…</p>;
   const k = (l: string, v: ReactNode, to?: string) => <div className="card kpi">{to ? <Link to={to}><div className="v">{v}</div></Link> : <div className="v">{v}</div>}<div className="l">{l}</div></div>;
   return <>
-    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. BI, alertas inteligentes e IA entram nas próximas fases.</p>
+    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Alertas inteligentes, previsão e IA entram nas próximas fases.</p>
     <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Produtos ativos', d.counts.products_active, '/produtos')}{k('Clientes ativos', d.counts.customers_active, '/clientes')}
       {k('Fornecedores', d.counts.suppliers_active, '/fornecedores')}{k('Marcas', d.counts.brands, '/marcas')}{k('Modelos de moto', d.counts.vehicle_models, '/motos')}
