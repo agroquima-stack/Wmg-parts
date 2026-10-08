@@ -3,22 +3,14 @@ import { pool } from '../db.js';
 import { can, requireAuth } from '../auth.js';
 import { idleAnalysis, stockSummary } from './stock.js';
 
-export async function searchRoutes(app: FastifyInstance) {
-  /**
-   * Busca por aplicação: "Pastilha CG 160 2020".
-   * Cada termo precisa casar com produto/marca/categoria/códigos OU com a moto/sistema/posição;
-   * um termo de 4 dígitos entre 1950 e 2100 vira filtro de ano contra o intervalo da aplicação.
-   */
-  app.get('/search/applications', async (req) => {
-    const a = can(req, 'products:view');
-    const raw = String((req.query as Record<string, string>).q ?? '').trim();
-    const tokens = raw.split(/\s+/).filter(Boolean).slice(0, 8);
-    if (!tokens.length) return { items: [] };
-    let year: number | null = null; const words: string[] = [];
-    for (const t of tokens) {
-      if (/^\d{4}$/.test(t) && +t >= 1950 && +t <= 2100 && year == null) year = +t; else words.push(t);
-    }
-    const params: unknown[] = [a.companyId]; const conds: string[] = [];
+export async function searchApplications(companyId: string, raw: string) {
+  const tokens = raw.split(/\s+/).filter(Boolean).slice(0, 8);
+  if (!tokens.length) return { items: [] as Array<Record<string, any>>, interpreted: { terms: [] as string[], year: null as number | null } };
+  let year: number | null = null; const words: string[] = [];
+  for (const t of tokens) {
+    if (/^\d{4}$/.test(t) && +t >= 1950 && +t <= 2100 && year == null) year = +t; else words.push(t);
+  }
+  const params: unknown[] = [companyId]; const conds: string[] = [];
     for (const w of words) {
       params.push(`%${w}%`);
       conds.push(`unaccent(concat_ws(' ', p.description, p.commercial_description, p.sku, p.manufacturer_code, p.original_code, b.name, c.name,
@@ -41,7 +33,18 @@ export async function searchRoutes(app: FastifyInstance) {
          left join vehicle_models vm on vm.id = pa.vehicle_model_id
         where p.company_id = $1 and p.active ${conds.length ? 'and ' + conds.join(' and ') : ''}
         group by p.id, b.name order by p.description limit 100`, params);
-    return { items: rows.rows, interpreted: { terms: words, year } };
+  return { items: rows.rows as Array<Record<string, any>>, interpreted: { terms: words, year } };
+}
+
+export async function searchRoutes(app: FastifyInstance) {
+  /**
+   * Busca por aplicação: "Pastilha CG 160 2020".
+   * Cada termo precisa casar com produto/marca/categoria/códigos OU com a moto/sistema/posição;
+   * um termo de 4 dígitos entre 1950 e 2100 vira filtro de ano contra o intervalo da aplicação.
+   */
+  app.get('/search/applications', async (req) => {
+    const a = can(req, 'products:view');
+    return searchApplications(a.companyId, String((req.query as Record<string, string>).q ?? '').trim());
   });
 
   /** Busca global: produtos (inclui códigos e EAN), clientes, fornecedores — filtrado por permissão. */
@@ -109,6 +112,30 @@ export async function searchRoutes(app: FastifyInstance) {
       if (idleValue > 0) alerts.push({ level: 'yellow', text: `R$ ${idleValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} parados em estoque há mais de 180 dias.` });
       if (stock.excess) alerts.push({ level: 'yellow', text: `${stock.excess} produtos acima do estoque máximo.` });
     }
-    return { counts, alerts, stock };
+    let commercial = null;
+    if (a.permissions.has('sales:view')) {
+      const own = a.permissions.has('sales:approve') ? '' : ` and seller_id = '${a.userId}'`;   // id vem da sessão (uuid), nunca do cliente
+      const k = (await pool.query(`select
+        coalesce(sum(total) filter (where confirmed_at::date = current_date),0)::numeric(14,2) as revenue_day,
+        coalesce(sum(total) filter (where date_trunc('month', confirmed_at) = date_trunc('month', now())),0)::numeric(14,2) as revenue_month,
+        count(*) filter (where date_trunc('month', confirmed_at) = date_trunc('month', now()))::int as sales_month,
+        coalesce(sum(margin_total) filter (where date_trunc('month', confirmed_at) = date_trunc('month', now())),0)::numeric(14,2) as margin_month,
+        coalesce(sum(commission_amount) filter (where date_trunc('month', confirmed_at) = date_trunc('month', now())),0)::numeric(14,2) as commission_month
+        from sales where company_id = $1 and status = 'concluida'${own}`, [c])).rows[0];
+      const bySeller = (await pool.query(`select u.name, sum(s.total)::numeric(14,2) as revenue, sum(s.margin_total)::numeric(14,2) as margin, count(*)::int as sales
+        from sales s join users u on u.id = s.seller_id where s.company_id = $1 and s.status = 'concluida' and date_trunc('month', s.confirmed_at) = date_trunc('month', now())${own.replace('seller_id', 's.seller_id')}
+        group by u.name order by revenue desc`, [c])).rows;
+      const byChannel = (await pool.query(`select channel, sum(total)::numeric(14,2) as revenue, count(*)::int as sales from sales where company_id = $1 and status = 'concluida'
+        and date_trunc('month', confirmed_at) = date_trunc('month', now())${own} group by channel order by revenue desc`, [c])).rows;
+      const goal = Number((await pool.query(`select value->>'monthly' as m from company_settings where company_id = $1 and key = 'goal'`, [c])).rows[0]?.m ?? 0);
+      const pending = a.permissions.has('sales:approve') ? (await pool.query(`select count(*)::int n from sale_approvals where company_id = $1 and status = 'pendente'`, [c])).rows[0].n : 0;
+      const expiring = (await pool.query(`select count(*)::int n from quotes where company_id = $1 and status in ('enviado','visualizado') and valid_until between current_date and current_date + 2${own.replace('seller_id', 'seller_id')}`, [c])).rows[0].n;
+      commercial = { ...k, avg_ticket: k.sales_month ? Math.round(Number(k.revenue_month) / k.sales_month * 100) / 100 : 0,
+        margin_pct: Number(k.revenue_month) > 0 ? Math.round(Number(k.margin_month) / Number(k.revenue_month) * 10000) / 100 : null,
+        goal, goal_pct: goal > 0 ? Math.round(Number(k.revenue_month) / goal * 1000) / 10 : null, by_seller: bySeller, by_channel: byChannel, pending_approvals: pending, quotes_expiring: expiring };
+      if (pending) alerts.unshift({ level: 'red', text: `${pending} venda(s) aguardando aprovação de desconto/margem.` });
+      if (expiring) alerts.push({ level: 'yellow', text: `${expiring} orçamento(s) expiram nos próximos 2 dias.` });
+    }
+    return { counts, alerts, stock, commercial };
   });
 }

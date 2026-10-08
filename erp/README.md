@@ -16,6 +16,8 @@ Produção: `ADMIN_EMAIL=… ADMIN_PASSWORD=… COMPANY_NAME=… npm run bootstr
 Testes: `cd api && npm test` (integração, exige Postgres com a demo).
 
 ## Estado
+Fase 3 (Comercial) pronta: tabelas de preço, motor de precificação e simulador, PDV, vendas com reserva/baixa de estoque, orçamentos com link público de aprovação, alçada de desconto com aprovação do gestor (5% padrão), B2B (limite de crédito, painel do cliente, pedidos recorrentes), dashboard comercial.
+
 Fase 2 (Estoque) pronta: saldos por filial/status, entradas/saídas/ajustes, reserva, bloqueio, avaria, transferências, inventário geral/rotativo, histórico imutável, custo médio global, produtos parados e curva ABC.
 
 Fase 1 (Core) pronta: login/sessões, multiempresa/multifilial, RBAC, auditoria, produtos (múltiplos EAN), aplicações em moto + busca "Pastilha CG 160 2020", equivalências, clientes (CPF/CNPJ validados), fornecedores, marcas/categorias, busca global.

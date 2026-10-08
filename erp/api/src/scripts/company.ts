@@ -16,6 +16,8 @@ export async function createCompany(db: PoolClient, o: {
     roleIds[name] = r.id;
     for (const p of new Set(def.permissions)) await db.query('insert into role_permissions values ($1,$2)', [r.id, p]);
   }
+  for (const n of ['varejo', 'oficina', 'atacado', 'revenda', 'especial', 'marketplace'])
+    await db.query('insert into price_tables (company_id, name, kind) values ($1,$2,$2)', [c.id, n]);
   const u = (await db.query(
     `insert into users (company_id, role_id, name, email, password_hash, must_change_password) values ($1,$2,$3,$4,$5,$6) returning id`,
     [c.id, roleIds.administrador, o.adminName, o.adminEmail, await hashPassword(o.adminPassword), o.mustChangePassword ?? true])).rows[0];

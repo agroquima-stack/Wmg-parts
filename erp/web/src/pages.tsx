@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError, brl, get, pct, qs } from './api';
 import { useAuth } from './auth';
 import { DataPage, Modal, type Field } from './DataPage';
+import { CustomerPanel } from './commercial';
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'].map((u) => ({ value: u, label: u }));
 const active: Field = { key: 'active', label: 'Ativo', type: 'checkbox', list: true };
@@ -20,11 +21,18 @@ export function Dashboard() {
   if (!d) return <p className="muted">Carregando…</p>;
   const k = (l: string, v: ReactNode, to?: string) => <div className="card kpi">{to ? <Link to={to}><div className="v">{v}</div></Link> : <div className="v">{v}</div>}<div className="l">{l}</div></div>;
   return <>
-    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Vendas e financeiro entram nas próximas fases.</p>
+    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Compras e financeiro entram nas próximas fases.</p>
     <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Produtos ativos', d.counts.products_active, '/produtos')}{k('Clientes ativos', d.counts.customers_active, '/clientes')}
       {k('Fornecedores', d.counts.suppliers_active, '/fornecedores')}{k('Marcas', d.counts.brands, '/marcas')}{k('Modelos de moto', d.counts.vehicle_models, '/motos')}
     </div>
+    {d.commercial && <><div className="grid kpis" style={{ marginBottom: 18 }}>
+      {k('Faturamento hoje', brl(d.commercial.revenue_day), '/vendas')}{k('Faturamento do mês', brl(d.commercial.revenue_month), '/vendas')}
+      {k('Meta do mês', d.commercial.goal_pct != null ? `${d.commercial.goal_pct}%` : 'sem meta', '/precificacao')}{k('Vendas no mês', d.commercial.sales_month)}
+      {k('Ticket médio', brl(d.commercial.avg_ticket))}{k('Margem bruta', d.commercial.margin_pct != null ? `${brl(d.commercial.margin_month)} · ${d.commercial.margin_pct}%` : '—')}</div>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', marginBottom: 18 }}>
+        <div className="card"><b>Vendas por vendedor (mês)</b><table><tbody>{d.commercial.by_seller.map((s: any) => <tr key={s.name}><td>{s.name}</td><td className="num">{brl(s.revenue)}</td><td className="num muted">margem {brl(s.margin)}</td></tr>)}{!d.commercial.by_seller.length && <tr><td className="muted">Sem vendas no mês.</td></tr>}</tbody></table></div>
+        <div className="card"><b>Vendas por canal (mês)</b><table><tbody>{d.commercial.by_channel.map((s: any) => <tr key={s.channel}><td>{s.channel}</td><td className="num">{brl(s.revenue)}</td><td className="num muted">{s.sales} vendas</td></tr>)}{!d.commercial.by_channel.length && <tr><td className="muted">Sem vendas no mês.</td></tr>}</tbody></table></div></div></>}
     {d.stock && <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Valor em estoque (custo médio)', brl(d.stock.total_value), '/estoque')}{k('Abaixo do mínimo', d.stock.below_min, '/estoque')}
       {k('Sem estoque', d.stock.out_of_stock, '/estoque')}{k('Acima do máximo', d.stock.excess, '/estoque')}
@@ -134,7 +142,7 @@ export const Suppliers = () => <DataPage title="Fornecedores" path="/suppliers" 
   ...address, { key: 'payment_terms_days', label: 'Prazo pgto (dias)', type: 'number', list: false }, { key: 'lead_time_days', label: 'Prazo entrega (dias)', type: 'number', list: false },
   { key: 'freight_type', label: 'Frete', type: 'select', options: [{ value: 'CIF', label: 'CIF' }, { value: 'FOB', label: 'FOB' }], list: false },
   { key: 'carrier', label: 'Transportadora', list: false }, { key: 'notes', label: 'Observações', type: 'textarea', list: false }, active]} />;
-export const Customers = () => <DataPage title="Clientes" path="/customers" perm="customers" fields={[
+export const Customers = () => <DataPage title="Clientes" path="/customers" perm="customers" extras={(row) => <CustomerButton id={row.id} />} fields={[
   { key: 'type', label: 'Tipo', type: 'select', options: [{ value: 'PF', label: 'Pessoa física' }, { value: 'PJ', label: 'Pessoa jurídica' }], required: true, list: true },
   { key: 'legal_name', label: 'Nome / Razão social', required: true, list: true }, { key: 'trade_name', label: 'Nome fantasia', list: false },
   { key: 'document', label: 'CPF / CNPJ', list: true }, { key: 'ie', label: 'IE', list: false },
@@ -198,4 +206,9 @@ export function Audit() {
       <div><b>Antes</b><pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{JSON.stringify(open.before, null, 2)}</pre></div>
       <div><b>Depois</b><pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{JSON.stringify(open.after, null, 2)}</pre></div></div></Modal>}
   </>;
+}
+
+function CustomerButton({ id }: { id: string }) {
+  const [open, setOpen] = useState(false);
+  return <div style={{ marginTop: 12 }}><button onClick={() => setOpen(true)}>Ver histórico, crédito e inadimplência</button>{open && <CustomerPanel id={id} onClose={() => setOpen(false)} />}</div>;
 }

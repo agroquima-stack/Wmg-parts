@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { api, get } from './api';
 import { AuthProvider, useAuth } from './auth';
+import { Approvals, B2B, PDV, Pricing, PriceTables, PublicQuote, Quotes, Sales } from './commercial';
 import { Inventories, Movements, StockAnalysis, StockPage, Transfers } from './stock';
 import { ApplicationSearch, Audit, Brands, Categories, Customers, Dashboard, Products, Roles, Suppliers, Users, Vehicles } from './pages';
 
@@ -42,6 +43,8 @@ const NAV: { group: string; items: [string, string, string][] }[] = [
   { group: 'Geral', items: [['/', 'Visão geral', ''], ['/busca', 'Busca por aplicação', 'products:view']] },
   { group: 'Cadastros', items: [['/produtos', 'Produtos', 'products:view'], ['/marcas', 'Marcas', 'brands:view'], ['/categorias', 'Categorias', 'categories:view'],
     ['/motos', 'Motos', 'vehicles:view'], ['/clientes', 'Clientes', 'customers:view'], ['/fornecedores', 'Fornecedores', 'suppliers:view']] },
+  { group: 'Comercial', items: [['/pdv', 'PDV / Nova venda', 'sales:create'], ['/vendas', 'Vendas', 'sales:view'], ['/orcamentos', 'Orçamentos', 'quotes:view'], ['/aprovacoes', 'Aprovações', 'sales:approve'],
+    ['/b2b', 'B2B', 'customers:view'], ['/precos', 'Tabelas de preço', 'pricing:view'], ['/precificacao', 'Precificação', 'pricing:view']] },
   { group: 'Estoque', items: [['/estoque', 'Saldos', 'stock:view'], ['/estoque/movimentos', 'Movimentações', 'stock:view'], ['/estoque/transferencias', 'Transferências', 'stock:view'],
     ['/estoque/inventario', 'Inventário', 'stock:view'], ['/estoque/analises', 'Parados e curva ABC', 'stock:view']] },
   { group: 'Administração', items: [['/usuarios', 'Usuários', 'users:view'], ['/perfis', 'Perfis e permissões', 'roles:view'], ['/auditoria', 'Auditoria', 'audit:view']] },
@@ -65,6 +68,8 @@ function Shell() {
         <Route path="/" element={<Dashboard />} /><Route path="/busca" element={<ApplicationSearch />} />
         <Route path="/produtos" element={<Products />} /><Route path="/marcas" element={<Brands />} /><Route path="/categorias" element={<Categories />} />
         <Route path="/motos" element={<Vehicles />} /><Route path="/clientes" element={<Customers />} /><Route path="/fornecedores" element={<Suppliers />} />
+        <Route path="/pdv" element={<PDV />} /><Route path="/vendas" element={<Sales />} /><Route path="/orcamentos" element={<Quotes />} /><Route path="/aprovacoes" element={<Approvals />} />
+        <Route path="/b2b" element={<B2B />} /><Route path="/precos" element={<PriceTables />} /><Route path="/precificacao" element={<Pricing />} />
         <Route path="/estoque" element={<StockPage />} /><Route path="/estoque/movimentos" element={<Movements />} /><Route path="/estoque/transferencias" element={<Transfers />} />
         <Route path="/estoque/inventario" element={<Inventories />} /><Route path="/estoque/analises" element={<StockAnalysis />} />
         <Route path="/usuarios" element={<Users />} /><Route path="/perfis" element={<Roles />} /><Route path="/auditoria" element={<Audit />} />
@@ -81,4 +86,9 @@ function Gate() {
   return <Shell />;
 }
 
-export default function App() { return <BrowserRouter><AuthProvider><Gate /></AuthProvider></BrowserRouter>; }
+function Root() {
+  const m = location.pathname.match(/^\/orcamento\/([\w-]+)$/);
+  if (m) return <PublicQuote token={m[1]} />;
+  return <AuthProvider><Gate /></AuthProvider>;
+}
+export default function App() { return <BrowserRouter><Root /></BrowserRouter>; }

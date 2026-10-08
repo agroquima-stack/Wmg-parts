@@ -1,7 +1,7 @@
 # WMG ERP — Arquitetura (primeira entrega)
 
 > Escopo: ERP + gestão + BI + pricing + IA para distribuidora de motopeças, multiempresa/multifilial.
-> Estado: **Fases 1 (Core) e 2 (Estoque) implementadas**. As demais fases estão especificadas aqui e entram em migrações incrementais.
+> Estado: **Fases 1 (Core), 2 (Estoque) e 3 (Comercial) implementadas**. As demais fases estão especificadas aqui e entram em migrações incrementais.
 
 ## 1. Arquitetura geral
 
@@ -88,7 +88,8 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 |---|---|---|
 | 1 Core | auth, empresas, filiais, usuários/RBAC, auditoria, produtos, marcas, categorias, motos/aplicações, equivalências, clientes, fornecedores, busca global, demo | **feito** |
 | 2 Estoque | saldos por filial/status, movimentações imutáveis, transferência, inventário, mínimo/máx, curva ABC, parados, custo médio global | **feito** |
-| 3 Comercial | tabelas de preço, motor de pricing, descontos/alçadas, orçamento→pedido, venda, PDV, B2B | |
+| 3 Comercial | tabelas de preço, motor de pricing, descontos/alçadas, orçamento→pedido, venda, PDV, B2B | **feito** |
+| 4 Compras … | (próxima: Compras) | |
 | 4 Compras | sugestão de compra, cotação, pedido, recebimento, XML, custo médio | |
 | 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | |
 | 6 Fiscal | NF-e/NFC-e via provedor, parametrização tributária (validada por contador), guias | |
@@ -131,6 +132,17 @@ Stateless API (escala horizontal atrás de balanceador); sessão no banco (migr�
 - Operações: entrada, entrada consignada, saída, ajuste ±, reserva/liberação, bloqueio/desbloqueio, avaria, transferência (saída → trânsito → recebimento, ou cancelamento) e inventário geral/rotativo (acerto exige `stock:approve`).
 - Análises: abaixo do mínimo / sem estoque / excesso, produtos parados por faixa (0–30 … +360) com capital, valor de venda, margem potencial e sugestão, e curva ABC configurável (corte A/B) por valor em estoque, quantidade ou saídas. **Faturamento e margem** como critério dependem das vendas (Fase 3) e hoje retornam erro explícito.
 - "Parado" usa a data da última saída (ou da entrada, se nunca saiu); quando a venda existir, ela gera a saída e a análise passa a refletir vendas reais.
+
+## Fase 3 — Comercial (como funciona)
+- **Preço de venda** (`resolvePrice`): base = preço de varejo do produto; a tabela do cliente aplica a melhor regra (cliente > produto > marca > categoria > geral; depois maior quantidade mínima; filtro por canal); promoções vigentes só podem reduzir o preço.
+- **Motor de precificação**: custo de aquisição (custo médio global + frete + seguro + acessórias) → preço = aquisição ÷ (1 − impostos − comissão − cartão − despesas variáveis − margem). Parâmetros por empresa (`company_settings`); a alíquota efetiva do Simples é informada e deve ser validada pelo contador — nada vem pré-configurado. Simulador nos dois sentidos (preço → margem; margem → preço) e aplicação em lote da sugestão (permissão `pricing:approve`, auditada).
+- **Alçada de desconto (decisão do negócio)**: o limite está em `users.max_discount_pct` (padrão 5% para vendedores). Desconto acima do limite, ou preço abaixo da margem/preço mínimo do produto, coloca a venda em `aguardando_aprovacao` (estoque já reservado) e abre `sale_approvals`. Só quem tem `sales:approve` aprova — e **nunca a própria venda** (segregação de funções). Quem já aprova não é barrado, mas o desvio é auditado (`self_approved`). Recusar cancela e libera a reserva. A prévia (`/sales/preview`) mostra margem antes/depois do desconto, margem mínima e impacto financeiro antes de concluir.
+- **Venda**: pedido reserva estoque → conclusão exige pagamentos = total, baixa o reservado (movimento `saida` com custo), gera `receivables` (à vista = pago; cartão/boleto/crediário = parcelas abertas), comissão do vendedor, CMV e margem (total − imposto estimado − CMV). Venda a prazo valida limite de crédito: acima do limite só gestor conclui. Cancelar concluída exige gestor, devolve ao estoque e estorna recebíveis. Falta de estoque devolve 409 com **equivalentes disponíveis**.
+- **Orçamento**: rascunho → enviado (link público com token; só o hash fica no banco) → visualizado → aprovado → convertido; expira automaticamente. Aprovação pelo cliente no link gera o pedido (preços do orçamento honrados; alçada avaliada contra o vendedor). Link de WhatsApp (`wa.me`) é gerado; **o envio automático por API do WhatsApp fica para a Fase 10**.
+- **PDV**: busca por código, EAN, SKU, fabricante, original, descrição e aplicação; leitor de código de barras funciona como teclado (Enter adiciona o item exato).
+- **B2B**: carteira com limite/utilizado/disponível/vencido, painel do cliente (faturamento, ticket, frequência, margem, mais comprados, inadimplência), repetir pedido em 1 clique e pedidos recorrentes (geração disparada pelo gestor; sem agendador automático ainda).
+- Vendedores enxergam só as próprias vendas e orçamentos; gestores veem tudo. Dashboard comercial real: faturamento dia/mês, meta, ticket, margem, por vendedor e por canal.
+- Limitações conscientes: documento fiscal só na Fase 6 (imposto da venda é **estimativa** pela alíquota informada); contas a receber são a base da Fase 5 (baixa/juros/multa/conciliação ainda não existem); comissão é calculada e gravada, mas ainda não há fechamento/pagamento de comissões.
 
 ## Perguntas em aberto
 - Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.

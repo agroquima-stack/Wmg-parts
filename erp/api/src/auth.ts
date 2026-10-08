@@ -9,7 +9,7 @@ export interface Auth {
 declare module 'fastify' { interface FastifyRequest { auth?: Auth } }
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string, public code?: string) { super(message); }
+  constructor(public status: number, message: string, public code?: string, public extra?: Record<string, unknown>) { super(message); }
 }
 
 /** Resolve a sessão a partir do Bearer token (token opaco; só o hash é armazenado). */
