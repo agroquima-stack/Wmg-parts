@@ -16,6 +16,8 @@ Produção: `ADMIN_EMAIL=… ADMIN_PASSWORD=… COMPANY_NAME=… npm run bootstr
 Testes: `cd api && npm test` (integração, exige Postgres com a demo).
 
 ## Estado
+Fase 5 (Financeiro) pronta: contas a receber/pagar com baixa parcial e juros/multa padrão de mercado, bancos e caixa opcional, importação de extrato CSV e conciliação, fluxo de caixa (realizado, previsto e projetado), comissões de representantes. Exemplos em `api/samples/`.
+
 Fase 4 (Compras) pronta: sugestão automática de compra, cotações com comparação, pedidos (aprovação opcional), recebimento por XML de NF-e ou manual com conferência/divergências, custo médio global, contas a pagar (base), devolução ao fornecedor e comparação de fornecedores. NF-e de exemplo em `api/samples/`.
 
 Fase 3 (Comercial) pronta: tabelas de preço, motor de precificação e simulador, PDV, vendas com reserva/baixa de estoque, orçamentos com link público de aprovação, alçada de desconto com aprovação do gestor (5% padrão), B2B (limite de crédito, painel do cliente, pedidos recorrentes), dashboard comercial.

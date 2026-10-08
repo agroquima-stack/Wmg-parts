@@ -4,6 +4,7 @@ import { HttpError, type Auth } from './auth.js';
 import { audit } from './audit.js';
 import { getPricingParams, resolvePrice } from './pricing.js';
 import { applyMovement } from './stock.js';
+import { autoSettleSaleReceivable, categoryId } from './finance.js';
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 export const SALE_TYPES = ['balcao', 'atacado', 'b2b', 'recorrente', 'externo', 'online'] as const;
@@ -147,6 +148,7 @@ export async function confirmSale(db: PoolClient, a: Auth, saleId: string, payme
       throw new HttpError(409, 'Limite de crédito excedido: a venda a prazo precisa ser concluída por um gestor.', 'credit_limit');
     if (used + onCredit > Number(term!.credit_limit)) await audit(db, a, 'sale', saleId, 'credit_limit_override', null, { used, onCredit, limit: term!.credit_limit });
   }
+  const catVendas = await categoryId(db, a.companyId, 'Vendas de mercadorias');
   for (const p of payments) {
     await db.query('insert into sale_payments (sale_id, company_id, method, amount, installments) values ($1,$2,$3,$4,$5)', [saleId, a.companyId, p.method, p.amount, p.installments ?? 1]);
     const n = p.installments ?? 1; const base = Math.floor(p.amount / n * 100) / 100;
@@ -154,10 +156,12 @@ export async function confirmSale(db: PoolClient, a: Auth, saleId: string, payme
       const amount = k === n ? r2(p.amount - base * (n - 1)) : base;
       const cash = CASH.includes(p.method);
       const days = cash ? 0 : (p.method === 'cartao_credito' ? 30 * k : (n === 1 && term?.payment_term_days ? term.payment_term_days : 30 * k));
-      await db.query(
-        `insert into receivables (company_id, sale_id, customer_id, installment_no, installments, due_date, amount, method, status, paid_at, paid_amount)
-         values ($1,$2,$3,$4,$5, current_date + $6::int, $7, $8, $9, $10, $11)`,
-        [a.companyId, saleId, sale.customer_id, k, n, days, amount, p.method, cash ? 'pago' : 'aberto', cash ? new Date() : null, cash ? amount : null]);
+      const rec = (await db.query(
+        `insert into receivables (company_id, sale_id, customer_id, installment_no, installments, due_date, amount, method, status, category_id, competence, description)
+         values ($1,$2,$3,$4,$5, current_date + $6::int, $7, $8, 'aberto', $9, date_trunc('month', current_date)::date, $10) returning id`,
+        [a.companyId, saleId, sale.customer_id, k, n, days, amount, p.method, catVendas, `Venda nº ${sale.number}`])).rows[0];
+      // à vista: baixa automática só se houver conta padrão para a forma de pagamento (senão fica em aberto p/ baixa ou conciliação)
+      if (cash) await autoSettleSaleReceivable(db, a, rec.id, p.method);
     }
   }
   const items = (await db.query('select * from sale_items where sale_id = $1', [saleId])).rows;

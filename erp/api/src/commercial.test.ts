@@ -22,6 +22,9 @@ before(async () => {
   await pool.query(`insert into users (company_id, role_id, name, email, password_hash, is_seller, commission_pct) values ($1,$2,'Vend',$3,$4,true,2)`, [r.companyId, r.roleIds.vendedor, `v${st}@t.local`, pw]);
   await pool.query(`insert into users (company_id, role_id, name, email, password_hash) values ($1,$2,'Ger',$3,$4)`, [r.companyId, r.roleIds.gerente, `g${st}@t.local`, pw]);
   adm = await login(`adm${st}@t.local`); vend = await login(`v${st}@t.local`); ger = await login(`g${st}@t.local`);
+  // financeiro: conta padrão para Pix → baixa automática à vista
+  const accId = (await call('POST', '/bank-accounts', { name: 'Conta teste', kind: 'banco', opening_balance: 0 })).json().id;
+  assert.equal((await call('PUT', '/finance/settings', { fine_pct: 2, interest_monthly_pct: 1, grace_days: 0, default_accounts: { pix: accId } })).statusCode, 200);
   assert.equal((await call('PUT', '/pricing/settings', { params: { freight_pct: 0, insurance_pct: 0, accessory_pct: 0, tax_pct: 6, commission_pct: 3, card_fee_pct: 2.5, variable_expenses_pct: 2 }, monthly_goal: 10000 })).statusCode, 200);
   const mk = async (sku: string, price: number) => (await call('POST', '/products', { sku, description: `Produto ${sku}`, cost_current: 10, sale_price: price, min_margin_pct: 20 })).json().id;
   prodA = await mk('A1', 30); prodB = await mk('B1', 28);

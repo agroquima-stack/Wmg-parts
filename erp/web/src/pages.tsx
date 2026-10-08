@@ -22,7 +22,7 @@ export function Dashboard() {
   if (!d) return <p className="muted">Carregando…</p>;
   const k = (l: string, v: ReactNode, to?: string) => <div className="card kpi">{to ? <Link to={to}><div className="v">{v}</div></Link> : <div className="v">{v}</div>}<div className="l">{l}</div></div>;
   return <>
-    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Financeiro entra nas próximas fases.</p>
+    <h1>Visão geral</h1><p className="sub">Indicadores calculados em tempo real a partir do banco. Fiscal e contabilidade entram nas próximas fases.</p>
     <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Produtos ativos', d.counts.products_active, '/produtos')}{k('Clientes ativos', d.counts.customers_active, '/clientes')}
       {k('Fornecedores', d.counts.suppliers_active, '/fornecedores')}{k('Marcas', d.counts.brands, '/marcas')}{k('Modelos de moto', d.counts.vehicle_models, '/motos')}
@@ -34,6 +34,9 @@ export function Dashboard() {
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', marginBottom: 18 }}>
         <div className="card"><b>Vendas por vendedor (mês)</b><table><tbody>{d.commercial.by_seller.map((s: any) => <tr key={s.name}><td>{s.name}</td><td className="num">{brl(s.revenue)}</td><td className="num muted">margem {brl(s.margin)}</td></tr>)}{!d.commercial.by_seller.length && <tr><td className="muted">Sem vendas no mês.</td></tr>}</tbody></table></div>
         <div className="card"><b>Vendas por canal (mês)</b><table><tbody>{d.commercial.by_channel.map((s: any) => <tr key={s.channel}><td>{s.channel}</td><td className="num">{brl(s.revenue)}</td><td className="num muted">{s.sales} vendas</td></tr>)}{!d.commercial.by_channel.length && <tr><td className="muted">Sem vendas no mês.</td></tr>}</tbody></table></div></div></>}
+    {d.finance && <div className="grid kpis" style={{ marginBottom: 18 }}>
+      {k('Saldo em caixa', brl(d.finance.cash_balance), '/financeiro/bancos')}{k('Saldo bancário', brl(d.finance.bank_balance), '/financeiro/bancos')}{k('A receber', brl(d.finance.receivable_open), '/financeiro/receber')}
+      {k('A receber vencido', brl(d.finance.receivable_overdue), '/financeiro/receber')}{k('Menor saldo projetado (90 d)', brl(d.finance.projected_min.value), '/financeiro/fluxo')}</div>}
     {d.purchasing && <div className="grid kpis" style={{ marginBottom: 18 }}>
       {k('Pedidos de compra abertos', d.purchasing.open_orders, '/compras/pedidos')}{k('Entregas atrasadas', d.purchasing.late_orders, '/compras/pedidos')}
       {k('Recebimentos em conferência', d.purchasing.receivings_open, '/compras/recebimento')}{k('A pagar em 7 dias', brl(d.purchasing.payables_7d))}{k('A pagar vencido', brl(d.purchasing.payables_overdue))}</div>}

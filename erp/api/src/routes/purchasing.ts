@@ -7,6 +7,7 @@ import { assertRefs, insertRow, pageParams } from '../crud.js';
 import { parseNFe } from '../lib/nfe.js';
 import { applyMovement } from '../stock.js';
 import { nextNumber } from '../sales.js';
+import { categoryId } from '../finance.js';
 import { createReceiving, finishReceiving, getPurchasingSettings, itemFlags, loadReceivingItems, recordSupplierPrice, suggestions } from '../purchasing.js';
 import { text } from '../schemas.js';
 import { branchOf } from './sales.js';
@@ -367,7 +368,7 @@ export async function purchasingRoutes(app: FastifyInstance) {
       }
       total = r2(total);
       await db.query('update supplier_returns set total = $2 where id = $1', [ret.id, total]);
-      if (total > 0) await db.query(`insert into payables (company_id, supplier_id, receiving_id, kind, due_date, amount, description) values ($1,$2,$3,'credito', current_date, $4, $5)`, [a.companyId, b.supplier_id, b.receiving_id ?? null, total, `Crédito — devolução nº ${number}`]);
+      if (total > 0) await db.query(`insert into payables (company_id, supplier_id, receiving_id, kind, due_date, amount, description, category_id, competence) values ($1,$2,$3,'credito', current_date, $4, $5, $6, date_trunc('month', current_date)::date)`, [a.companyId, b.supplier_id, b.receiving_id ?? null, total, `Crédito — devolução nº ${number}`, await categoryId(db, a.companyId, 'Compra de mercadorias')]);
       await audit(db, a, 'supplier_return', ret.id, 'create', null, { number, total, items: b.items.length }); return { ...ret, total };
     });
     return reply.code(201).send(out);

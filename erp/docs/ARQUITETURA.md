@@ -1,7 +1,7 @@
 # WMG ERP — Arquitetura (primeira entrega)
 
 > Escopo: ERP + gestão + BI + pricing + IA para distribuidora de motopeças, multiempresa/multifilial.
-> Estado: **Fases 1 (Core), 2 (Estoque), 3 (Comercial) e 4 (Compras) implementadas**. As demais fases estão especificadas aqui e entram em migrações incrementais.
+> Estado: **Fases 1 a 5 implementadas (Core, Estoque, Comercial, Compras e Financeiro)**. As demais fases estão especificadas aqui e entram em migrações incrementais.
 
 ## 1. Arquitetura geral
 
@@ -91,7 +91,7 @@ Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedo
 | 3 Comercial | tabelas de preço, motor de pricing, descontos/alçadas, orçamento→pedido, venda, PDV, B2B | **feito** |
 | 4 Compras … | (próxima: Compras) | |
 | 4 Compras | sugestão de compra, cotação, pedido, recebimento, XML, custo médio | **feito** |
-| 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | |
+| 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | **feito** |
 | 6 Fiscal | NF-e/NFC-e via provedor, parametrização tributária (validada por contador), guias | |
 | 7 Controladoria | plano de contas, centros de custo, DRE, balanço | |
 | 8 BI · 9 IA · 10 Ecossistema | dashboards, alertas, "Pergunte à Empresa", previsão, WhatsApp, marketplaces | |
@@ -122,6 +122,7 @@ A fazer: RLS do Postgres como segunda barreira, 2FA, criptografia de campos sens
 Stateless API (escala horizontal atrás de balanceador); sessão no banco (migrável p/ Redis); paginação obrigatória (máx. 200); índices por `company_id` + chaves de busca; `stock_movements`/`audit_log` append-only e particionáveis por mês; saldos materializados em `stock_balances` (leitura O(1)); BI/relatórios pesados em réplica de leitura/visões materializadas; workers separados via outbox para integrações; multiempresa por coluna hoje, com caminho para schema/banco dedicado por cliente grande.
 
 ## Decisões do negócio (confirmadas)
+- **Financeiro (confirmado):** banco único hoje = **BTG Pactual**, extrato em **CSV**; juros/multa pelo **padrão de mercado** (multa 2% única + juros 1% a.m. pro rata dia, configurável); **sem balcão** — vendas por representante externo e online, caixa físico opcional.
 - **Compras (confirmado):** sem aprovação de compra por padrão — `emitir` já aprova; há um limite de aprovação configurável (`purchasing.approval_threshold`) para quando o negócio quiser. Fornecedores emitem **nota normal do Simples, sem ST**.
 - **Regime tributário: Simples Nacional.** A Fase 6 usa CSOSN (não CST de ICMS), sem destaque de crédito de ICMS na saída, apuração via DAS; ICMS-ST/DIFAL tratados por regra de produto/UF. Parametrização a validar com o contador.
 - **Custo médio: global** (um custo médio por produto, somando todas as filiais). Implementado: toda entrada com custo recalcula `cost_avg` ponderado pelo saldo próprio total (disponível+reservado+avariado+quarentena); transferência não altera custo.
@@ -155,6 +156,18 @@ Stateless API (escala horizontal atrás de balanceador); sessão no banco (migr�
 - **Comparação de fornecedores**: último preço, variação sobre o preço anterior, média/menor/maior, prazos e histórico — base para o alerta "fornecedor aumentando preço" (Fase 9).
 - Permissões: `purchases:*` (pedidos, cotações, devoluções) e `receiving:*` (recebimento): o estoquista confere e dá entrada, mas não emite pedidos.
 - Limitações: contas a pagar são só o registro (pagamento, juros, categoria e centro de custo na Fase 5); não há envio automático de pedido ao fornecedor por e-mail/portal (marcar "enviado" é manual); manifestação do destinatário/SEFAZ não é feita (importa apenas o XML recebido); XML de NF com ST ou de outro regime será lido, mas o custo não trata ICMS-ST (fora do escopo confirmado).
+
+## Fase 5 — Financeiro (como funciona)
+- **Contas** (`bank_accounts`: banco, caixa, aplicação) com **razão** (`account_movements`): saldo = saldo inicial + movimentos. Transferências e aplicações/resgates são pares de movimentos; tarifas, juros, rendimentos e ajustes são lançamentos avulsos (ajuste exige gestor).
+- **Baixas** (`settlements`) totais ou **parciais**, para receber e pagar: caixa = principal − desconto + juros + multa (− taxa de cartão/gateway nos recebimentos). Juros/multa são calculados pelo padrão da empresa — multa uma única vez sobre o saldo, juros pro rata dia desde o vencimento ou da última baixa. **Perdoar encargos** ou dar desconto > 5% exige `finance:approve`; tudo é auditado. Estorno de baixa (gestor) gera movimento inverso e é bloqueado se já foi conciliado.
+- **Contas a receber**: parcelas das vendas e títulos avulsos, aging (a vencer, 1–30, 31–60, 61–90, +90), inadimplência. Pagamentos à vista (Pix, débito, dinheiro) só baixam sozinhos se houver **conta padrão** para a forma de pagamento; senão ficam em aberto para baixa manual ou conciliação. Cartão de crédito e boleto sempre aguardam o recebimento (a taxa real entra na baixa).
+- **Contas a pagar**: notas de compra, despesas avulsas com **categoria, centro de custo e competência**, parcelamento e recorrência mensal, compensação de créditos de fornecedor (devolução) e comissões. Categorias já trazem o grupo da DRE (`dre_group`) para a Fase 7.
+- **Conciliação bancária**: importação de extrato **CSV** com mapeamento de colunas (detecção automática pelo cabeçalho, separador, formato numérico/data brasileiros, débito/crédito em colunas separadas ou valor com sinal; mapeamento salvo por conta; reimportar não duplica). Concilia automaticamente linha ↔ movimento do ERP quando há um único candidato exato (mesma conta, valor e data ±5 dias); o restante é resolvido por: vincular movimento, **baixar título direto do extrato** (o valor calculado precisa bater com o extrato), criar lançamento (tarifa/rendimento/…) ou ignorar com motivo.
+- **Caixa físico (opcional)**: abertura, suprimento, sangria (com destino) e fechamento com diferença lançada como quebra de caixa. Fica desligado na prática enquanto não houver balcão.
+- **Fluxo de caixa** (hoje, 7, 30, 60, 90 dias e 12 meses): *realizado* (movimentos), *previsto* (vencimentos em aberto) e *projetado* (previsto ajustado pelo atraso médio e taxa de recebimento medidos no histórico; com menos de 10 títulos históricos não há ajuste e a confiança é "baixa"). Alerta de saldo futuro negativo no painel.
+- **Comissões**: calculadas por venda; o fechamento por vendedor gera um título a pagar (categoria Comissões) e marca as vendas — sem pagamento em duplicidade.
+- **Limitação importante — layout do BTG**: não tive acesso a um extrato real do BTG Pactual; o importador trabalha por mapeamento de colunas e detecta pelos nomes de cabeçalho comuns (data, histórico/descrição, valor ou débito/crédito, documento). **Envie um CSV real (com dados sensíveis mascarados) para validarmos e fixarmos o perfil do BTG.** `api/samples/extrato-exemplo-demo.csv` tem layout genérico, não oficial.
+- Outras limitações: não há integração bancária/Open Finance nem boleto/Pix emitidos pelo sistema; sem conciliação de cartão por operadora/gateway (a taxa é informada na baixa); sem rateio de baixa entre vários títulos de uma vez; comissão de venda cancelada depois do fechamento não é estornada automaticamente; DRE/lucro do mês entram na Fase 7.
 
 ## Perguntas em aberto
 - Provedor de emissão fiscal (ex.: Focus NFe, eNotas) para a Fase 6.

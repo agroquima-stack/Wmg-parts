@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { pool } from '../db.js';
 import { can, requireAuth } from '../auth.js';
 import { idleAnalysis, stockSummary } from './stock.js';
+import { cashflow } from '../finance.js';
 
 export async function searchApplications(companyId: string, raw: string) {
   const tokens = raw.split(/\s+/).filter(Boolean).slice(0, 8);
@@ -143,8 +144,8 @@ export async function searchRoutes(app: FastifyInstance) {
         (select count(*)::int from purchase_orders where company_id = $1 and status in ('aprovado','enviado','parcial') and expected_date < current_date) as late_orders,
         (select count(*)::int from purchase_orders where company_id = $1 and status in ('aprovado','enviado','parcial')) as open_orders,
         (select count(*)::int from receivings where company_id = $1 and status = 'em_conferencia') as receivings_open,
-        coalesce((select sum(amount) from payables where company_id = $1 and kind = 'titulo' and status = 'aberto' and due_date between current_date and current_date + 7),0)::numeric(14,2) as payables_7d,
-        coalesce((select sum(amount) from payables where company_id = $1 and kind = 'titulo' and status = 'aberto' and due_date < current_date),0)::numeric(14,2) as payables_overdue`, [c])).rows[0];
+        coalesce((select sum((t.amount - coalesce((select sum(principal) from settlements s where s.payable_id = t.id and s.reversed_at is null), 0))) from payables t where t.company_id = $1 and t.kind = 'titulo' and t.status in ('aberto','parcial') and t.due_date between current_date and current_date + 7),0)::numeric(14,2) as payables_7d,
+        coalesce((select sum((t.amount - coalesce((select sum(principal) from settlements s where s.payable_id = t.id and s.reversed_at is null), 0))) from payables t where t.company_id = $1 and t.kind = 'titulo' and t.status in ('aberto','parcial') and t.due_date < current_date),0)::numeric(14,2) as payables_overdue`, [c])).rows[0];
       purchasing = k;
       if (k.awaiting_approval) alerts.unshift({ level: 'yellow', text: `${k.awaiting_approval} pedido(s) de compra aguardando aprovação.` });
       if (k.late_orders) alerts.push({ level: 'red', text: `${k.late_orders} pedido(s) de compra com entrega atrasada.` });
@@ -152,6 +153,22 @@ export async function searchRoutes(app: FastifyInstance) {
       if (Number(k.payables_overdue) > 0) alerts.unshift({ level: 'red', text: `R$ ${Number(k.payables_overdue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em contas a pagar vencidas.` });
       if (Number(k.payables_7d) > 0) alerts.push({ level: 'yellow', text: `R$ ${Number(k.payables_7d).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em contas a pagar vencem nos próximos 7 dias.` });
     }
-    return { counts, alerts, stock, commercial, purchasing };
+    let finance = null;
+    if (a.permissions.has('finance:view')) {
+      const OUTR = "(t.amount - coalesce((select sum(principal) from settlements s where s.receivable_id = t.id and s.reversed_at is null), 0))";
+      const f = (await pool.query(`select
+        coalesce((select sum(ba.opening_balance + coalesce((select sum(amount) from account_movements m where m.account_id = ba.id and not m.reversed),0)) from bank_accounts ba where ba.company_id = $1 and ba.kind = 'caixa' and ba.active),0)::numeric(14,2) as cash_balance,
+        coalesce((select sum(ba.opening_balance + coalesce((select sum(amount) from account_movements m where m.account_id = ba.id and not m.reversed),0)) from bank_accounts ba where ba.company_id = $1 and ba.kind = 'banco' and ba.active),0)::numeric(14,2) as bank_balance,
+        coalesce((select sum(${OUTR}) from receivables t where t.company_id = $1 and t.status in ('aberto','parcial')),0)::numeric(14,2) as receivable_open,
+        coalesce((select sum(${OUTR}) from receivables t where t.company_id = $1 and t.status in ('aberto','parcial') and t.due_date < current_date),0)::numeric(14,2) as receivable_overdue,
+        (select count(distinct customer_id)::int from receivables t where t.company_id = $1 and t.status in ('aberto','parcial') and t.due_date < current_date and t.customer_id is not null) as customers_overdue,
+        (select count(*)::int from bank_statement_lines where company_id = $1 and status = 'pendente') as statement_pending`, [c])).rows[0];
+      const cf = await cashflow(pool, c, 90);
+      finance = { ...f, projected_min: cf.min_projected_balance, negative_from: cf.negative_from, projection: cf.projection };
+      if (cf.negative_from) alerts.unshift({ level: 'red', text: `Fluxo de caixa projetado fica negativo a partir de ${String(cf.negative_from).split('-').reverse().join('/')} (menor saldo: R$ ${cf.min_projected_balance.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).` });
+      if (Number(f.receivable_overdue) > 0) alerts.unshift({ level: 'red', text: `R$ ${Number(f.receivable_overdue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em contas a receber vencidas (${f.customers_overdue} cliente(s) inadimplente(s)).` });
+      if (f.statement_pending) alerts.push({ level: 'yellow', text: `${f.statement_pending} linha(s) de extrato bancário pendentes de conciliação.` });
+    }
+    return { counts, alerts, stock, commercial, purchasing, finance };
   });
 }
