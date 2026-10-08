@@ -1,0 +1,126 @@
+# WMG ERP — Arquitetura (primeira entrega)
+
+> Escopo: ERP + gestão + BI + pricing + IA para distribuidora de motopeças, multiempresa/multifilial.
+> Estado: **Fase 1 (Core) implementada**. As demais fases estão especificadas aqui e entram em migrações incrementais.
+
+## 1. Arquitetura geral
+
+Monólito modular (um deploy, módulos com fronteiras claras) — o ponto certo entre simplicidade e escala para o porte inicial, com caminho para extrair serviços (fiscal, integrações, IA) depois.
+
+```
+ Navegador (SPA React) ──HTTPS──▶ API REST (Fastify) ──▶ PostgreSQL
+                                     │  ├─ auth/sessões   ├─ dados de todas as empresas (company_id)
+                                     │  ├─ RBAC           └─ audit_log (append-only)
+                                     │  ├─ módulos de domínio (catálogo, estoque, comercial…)
+                                     │  └─ outbox de eventos ──▶ workers (fiscal, WhatsApp, marketplaces, IA)  [fases futuras]
+```
+
+Princípios: (1) **uma transação por operação de negócio** — dado + movimento de estoque + financeiro + auditoria juntos; (2) **nada duplicado** — a venda gera o resto por regra, o usuário não relança; (3) **integrações desacopladas** por interface/adapters e outbox, nunca chamadas síncronas dentro da transação de negócio.
+
+## 2. Stack
+
+| Camada | Escolha | Motivo |
+|---|---|---|
+| Banco | PostgreSQL 16 | relacional robusto, NUMERIC exato p/ dinheiro, JSONB p/ auditoria, `pg_trgm`/`unaccent` p/ busca rápida |
+| API | Node 22 + TypeScript + Fastify | rápido, tipado; `zod` valida toda entrada |
+| Front | React + Vite + TypeScript | SPA desktop-first, responsiva |
+| Auth | token de sessão opaco (hash SHA-256 no banco) + senha scrypt | sessão revogável; sem cookies ⇒ sem CSRF |
+| Testes | `node:test` (integração contra Postgres real) | |
+
+SQL é escrito à mão (parametrizado) com migrações versionadas em `api/migrations` — sem ORM, para controlar índices/transações.
+
+## 3. Estrutura do banco (Fase 1 implementada em `001_core.sql`)
+
+```
+companies ─┬─ branches (matriz/filiais)
+           ├─ roles ── role_permissions            users ── user_branches
+           ├─ users ── sessions                    audit_log (company, user, entity, action, before, after, ip)
+           ├─ brands, categories(árvore)
+           ├─ products ── product_barcodes (N EAN) ── product_applications ──▶ vehicle_models
+           │       └─── product_equivalences ──▶ equivalence_groups   (1 grupo por produto)
+           ├─ customers (PF/PJ, vendedor, tabela de preço, limite)
+           └─ suppliers (condições comerciais)
+```
+Regras: UUID em todas as PKs; `company_id` obrigatório em toda tabela de negócio; unicidades por empresa (`sku`, `barcode`, CPF/CNPJ); custo/preço em `NUMERIC`; índices em chaves de busca e GIN trigram em descrições.
+
+**Próximas fases (tabelas previstas):**
+- F2 Estoque: `stock_balances(product, branch, status[disponível|reservado|trânsito|avariado|quarentena|consignado], qty)`, `stock_movements` (append-only: usuário, doc, origem, destino, qtd anterior/movida/posterior), `inventories`.
+- F3 Comercial: `price_tables/price_rules`, `quotes/quote_items`, `orders/order_items`, `sales/sale_items`, `payments`, `discount_approvals`.
+- F4 Compras: `purchase_requests`, `quotations`, `purchase_orders/items`, `receivings`, `supplier_price_history`.
+- F5 Financeiro: `receivables`, `payables`, `cash_sessions`, `bank_accounts`, `bank_transactions`, `reconciliations`.
+- F6 Fiscal: `fiscal_documents`, `tax_rules`, `tax_payments`. F7: `chart_of_accounts`, `cost_centers`, `journal_entries` (partidas dobradas — DRE e balanço saem daqui, garantindo consistência). F9: `alert_rules/alerts`, `forecasts`, `ai_queries`.
+
+## 4. Diagrama dos módulos
+
+```
+ CADASTROS ─▶ COMPRAS ─▶ ESTOQUE ─▶ PRECIFICAÇÃO ─▶ ORÇAMENTO ─▶ VENDA/PDV/B2B ─▶ EXPEDIÇÃO ─▶ ENTREGA
+    │            │           │            │                            │                          
+    └────────────┴───────────┴────────────┴──────────┬─────────────────┘            DEVOLUÇÃO/GARANTIA
+                                                      ▼
+                    FISCAL ◀── FINANCEIRO (AR/AP/caixa/bancos/conciliação) ──▶ FLUXO DE CAIXA
+                                                      ▼
+                          CONTABILIDADE GERENCIAL (plano de contas, CC, DRE, balanço)
+                                                      ▼
+                              BI ──▶ ALERTAS ──▶ IA "Pergunte à Empresa" / PREVISÃO
+ Transversais: Usuários/RBAC · Auditoria · Multiempresa/Multifilial · Integrações (WhatsApp, bancos, marketplaces, transportadoras)
+```
+
+## 5. Fluxo de informações (evento de venda)
+
+Uma única transação `confirmarVenda`:
+1. valida permissão, limite de crédito, desconto/margem mínima (exige aprovação se violar);
+2. reserva/baixa estoque → `stock_movements` (origem = venda);
+3. grava custo (CMV) e margem por item;
+4. cria `receivables` (parcelas) e comissão do vendedor;
+5. lança partidas contábeis (receita, impostos, CMV, estoque, contas a receber);
+6. grava `audit_log` e publica evento no **outbox**.
+
+Depois, assíncrono via outbox: emissão fiscal, envio WhatsApp, sincronização de estoque com marketplaces. Fluxo de caixa, DRE, BI e giro são **consultas/visões sobre os mesmos lançamentos** — não há cópia manual de dados.
+
+## 6. Usuários e permissões (implementado)
+
+RBAC: `perfil → permissões "recurso:ação"` com ações `view, create, edit, delete, approve` sobre os recursos (`products, brands, categories, vehicles, equivalences, customers, suppliers, users, roles, branches, audit, settings` — novos módulos acrescentam recursos).
+Perfis padrão por empresa: administrador, diretor, gerente, financeiro, vendedor, comprador, estoquista, fiscal, expedição (editáveis na tela *Perfis e permissões*, exceto administrador). Toda rota checa `can(req, 'recurso:ação')` no servidor; o front apenas esconde menus. Usuário tem ainda `max_discount_pct` (alçada de desconto, usada na Fase 3) e filiais permitidas.
+
+## 7. Roadmap
+
+| Fase | Entrega | Status |
+|---|---|---|
+| 1 Core | auth, empresas, filiais, usuários/RBAC, auditoria, produtos, marcas, categorias, motos/aplicações, equivalências, clientes, fornecedores, busca global, demo | **feito** |
+| 2 Estoque | saldos por filial/status, movimentações, transferência, inventário, mínimo/máx, curva ABC, parados | próxima |
+| 3 Comercial | tabelas de preço, motor de pricing, descontos/alçadas, orçamento→pedido, venda, PDV, B2B | |
+| 4 Compras | sugestão de compra, cotação, pedido, recebimento, XML, custo médio | |
+| 5 Financeiro | AR/AP, caixa, bancos, conciliação, fluxo de caixa | |
+| 6 Fiscal | NF-e/NFC-e via provedor, parametrização tributária (validada por contador), guias | |
+| 7 Controladoria | plano de contas, centros de custo, DRE, balanço | |
+| 8 BI · 9 IA · 10 Ecossistema | dashboards, alertas, "Pergunte à Empresa", previsão, WhatsApp, marketplaces | |
+
+## 8. Wireframes (desktop)
+
+```
+┌ Sidebar ─┬ [🔎 Busca global: produto, código, EAN, cliente…]  [Filial ▾]  Usuário · Perfil ┐
+│ Geral    ├────────────────────────────────────────────────────────────────────────────┤
+│ Cadastros│  Visão geral                                                                 │
+│ Admin    │  [Produtos][Clientes][Fornecedores][Marcas][Motos]    ← KPIs reais do banco  │
+│ Conta    │  Alertas: 🔴 margem abaixo da mínima  🟡 sem NCM  🟡 sem aplicação            │
+└──────────┴────────────────────────────────────────────────────────────────────────────┘
+Lista (padrão): [Pesquisar…]  N registros                         [+ Novo]
+                SKU │ Descrição │ Marca │ Cód.fab │ Custo │ Preço │ Margem │ Ativo   (clique abre edição)
+Produto (modal): campos do cadastro · Aplicações em moto (add/remover) · Equivalentes (marca, código, custo, preço, margem)
+Busca por aplicação: [ Pastilha CG 160 2020 ]  → peças + "compatível com Honda CG 160 Titan 2016–atual"
+PDV (Fase 3):   [código/EAN/aplicação ▸ enter]   itens ▸ total ▸ [F2 cliente] [F4 desconto] [F10 pagar]
+```
+
+## 9. Segurança
+
+Implementado: senhas com scrypt+salt (nunca texto puro) e política mínima; sessão opaca revogável com expiração (12 h), hash no banco; bloqueio após 5 falhas (15 min) e mensagem de erro idêntica para e-mail inexistente/senha errada; rate limit global e específico no login; Helmet + CORS restrito; SQL 100 % parametrizado (nomes de coluna vêm de whitelist `zod`); React escapa saída (XSS); Bearer token em header (sem CSRF); senha provisória força troca; troca de senha revoga outras sessões; auditoria de logins, alterações de preço/custo, exclusões, permissões; isolamento por `company_id` com validação de referências cruzadas (testado).
+A fazer: RLS do Postgres como segunda barreira, 2FA, criptografia de campos sensíveis em repouso, rotina de backup/restore (pg_dump + PITR), política LGPD (base legal, consentimento, exportação/anonimização de titular), retenção de logs.
+
+## 10. Escalabilidade
+
+Stateless API (escala horizontal atrás de balanceador); sessão no banco (migrável p/ Redis); paginação obrigatória (máx. 200); índices por `company_id` + chaves de busca; `stock_movements`/`audit_log` append-only e particionáveis por mês; saldos materializados em `stock_balances` (leitura O(1)); BI/relatórios pesados em réplica de leitura/visões materializadas; workers separados via outbox para integrações; multiempresa por coluna hoje, com caminho para schema/banco dedicado por cliente grande.
+
+## Perguntas em aberto (precisam de decisão do negócio)
+- Regime tributário da empresa (Simples/Presumido/Real) e provedor fiscal (ex.: Focus NFe, eNotas) — definem a Fase 6.
+- Custo médio ponderado por filial ou global? (assumido: por filial, na Fase 4)
+- Regras de alçada de desconto (percentuais por perfil) — hoje há `max_discount_pct` por usuário.
